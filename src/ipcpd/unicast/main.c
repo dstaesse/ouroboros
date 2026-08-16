@@ -35,6 +35,7 @@
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/notifier.h>
+#include <ouroboros/qos.h>
 #include <ouroboros/random.h>
 #include <ouroboros/rib.h>
 #include <ouroboros/time.h>
@@ -175,12 +176,14 @@ static void stop_components(void)
         ipcp_set_state(IPCP_BOOT);
 }
 
-static int unicast_ipcp_enroll(const char *        dst,
-                               struct layer_info * info)
+static int unicast_ipcp_enroll(const char *            dst,
+                               const struct poa_addr * addr,
+                               struct layer_info *     info)
 {
         struct ipcp_config * conf;
         struct conn          conn;
         uint8_t              id[ENROLL_ID_LEN];
+        qosspec_t            qs = qos_msg;
 
         if (random_buffer(id, ENROLL_ID_LEN) < 0) {
                 log_err("Failed to generate enrollment ID.");
@@ -189,7 +192,7 @@ static int unicast_ipcp_enroll(const char *        dst,
 
         log_info_id(id, "Requesting enrollment.");
 
-        if (connmgr_alloc(COMPID_ENROLL, dst, NULL, &conn) < 0) {
+        if (connmgr_alloc(COMPID_ENROLL, dst, &qs, addr, &conn) < 0) {
                 log_err_id(id, "Failed to get connection.");
                 goto fail_id;
         }

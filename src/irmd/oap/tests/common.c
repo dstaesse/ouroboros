@@ -159,7 +159,7 @@ void oap_test_teardown(struct oap_test_ctx * ctx)
 
         if (ctx->cli.state != NULL) {
                 res.key = ctx->cli.key;
-                oap_cli_complete(ctx->cli.state, &ctx->cli.info, dummy,
+                oap_cli_complete(ctx->cli.state, dummy,
                                  &ctx->data, &res, NULL, NULL);
                 ctx->cli.state = NULL;
         }
@@ -179,8 +179,8 @@ void oap_test_teardown(struct oap_test_ctx * ctx)
 
 int oap_cli_prepare_ctx(struct oap_test_ctx * ctx)
 {
-        return oap_cli_prepare(&ctx->cli.state, &ctx->cli.info, &ctx->req_hdr,
-                               ctx->data, ctx->rekey);
+        return oap_cli_prepare(&ctx->cli.state, &ctx->cli.info, NULL,
+                               &ctx->req_hdr, ctx->data, ctx->rekey);
 }
 
 int oap_srv_process_ctx(struct oap_test_ctx * ctx)
@@ -203,8 +203,7 @@ int oap_cli_complete_ctx(struct oap_test_ctx * ctx)
         struct crypt_sk res = { .nid = NID_undef, .key = ctx->cli.key };
         int            ret;
 
-        ret = oap_cli_complete(ctx->cli.state, &ctx->cli.info, ctx->resp_hdr,
-                               &ctx->data, &res,
+        ret = oap_cli_complete(ctx->cli.state, ctx->resp_hdr, &ctx->data, &res,
                                ctx->rekey ? &ctx->cli_crt : NULL,
                                ctx->rekey ? NULL : &ctx->cli_crt);
         ctx->cli.state = NULL;
@@ -527,7 +526,7 @@ int roundtrip_kex_only(void)
                 goto fail;
         }
 
-        if (oap_cli_prepare(&cli_state, &cli_info, &req_hdr,
+        if (oap_cli_prepare(&cli_state, &cli_info, NULL, &req_hdr,
                             data, false) < 0) {
                 printf("Client prepare failed.\n");
                 goto fail_cleanup;
@@ -545,7 +544,7 @@ int roundtrip_kex_only(void)
 
         res.key = cli_key;
 
-        if (oap_cli_complete(cli_state, &cli_info, resp_hdr, &data, &res,
+        if (oap_cli_complete(cli_state, resp_hdr, &data, &res,
                              NULL, NULL) < 0) {
                 printf("Client complete failed.\n");
                 cli_state = NULL;
@@ -575,8 +574,8 @@ int roundtrip_kex_only(void)
  fail_cleanup:
         if (cli_state != NULL) {
                 res.key = cli_key;
-                oap_cli_complete(cli_state, &cli_info, resp_hdr, &data,
-                                 &res, NULL, NULL);
+
+                oap_cli_complete(cli_state, resp_hdr, &data, &res, NULL, NULL);
         }
         freebuf(resp_hdr);
         freebuf(req_hdr);
@@ -655,7 +654,7 @@ int corrupted_response(const char * root_ca,
 
         res.key = ctx.cli.key;
 
-        if (oap_cli_complete(ctx.cli.state, &ctx.cli.info, ctx.resp_hdr,
+        if (oap_cli_complete(ctx.cli.state, ctx.resp_hdr,
                              &ctx.data, &res, NULL, NULL) == 0) {
                 printf("Client should reject corrupted response.\n");
                 ctx.cli.state = NULL;

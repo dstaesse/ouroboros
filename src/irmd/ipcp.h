@@ -27,48 +27,57 @@
 #ifndef OUROBOROS_IRMD_IPCP_H
 #define OUROBOROS_IRMD_IPCP_H
 
-int   ipcp_enroll(pid_t               pid,
-                  const char *        dst,
-                  struct layer_info * info);
+int     ipcp_enroll(pid_t                   pid,
+                    const char *            dst,
+                    const struct poa_addr * addr,
+                    struct layer_info *     info);
 
-int   ipcp_bootstrap(pid_t                pid,
-                     struct ipcp_config * conf,
-                     struct layer_info *  info);
+int     ipcp_attach(pid_t                   pid,
+                    const struct poa_spec * poa,
+                    bool                    attach);
 
-int   ipcp_connect(pid_t        pid,
-                   const char * dst,
-                   const char * component,
-                   qosspec_t    qs);
+ssize_t ipcp_list_poas(pid_t              pid,
+                       struct poa_spec ** eps);
 
-int   ipcp_disconnect(pid_t        pid,
-                      const char * dst,
-                      const char * component);
+int     ipcp_bootstrap(pid_t                pid,
+                       struct ipcp_config * conf,
+                       struct layer_info *  info);
 
-int   ipcp_reg(pid_t          pid,
-               const buffer_t hash);
+int     ipcp_connect(pid_t                   pid,
+                     const char *            dst,
+                     const char *            component,
+                     qosspec_t               qs,
+                     const struct poa_addr * addr);
 
-int   ipcp_unreg(pid_t          pid,
+int     ipcp_disconnect(pid_t        pid,
+                        const char * dst,
+                        const char * component);
+
+int     ipcp_reg(pid_t          pid,
                  const buffer_t hash);
 
-int   ipcp_query(pid_t          pid,
-                 const buffer_t dst);
+int     ipcp_unreg(pid_t          pid,
+                   const buffer_t hash);
 
-int   ipcp_flow_alloc(const struct flow_info * flow,
-                      const buffer_t           hash,
-                      const buffer_t           data);
+int     ipcp_query(pid_t          pid,
+                   const buffer_t dst);
 
-int   ipcp_flow_join(const struct flow_info * flow,
-                     const buffer_t           dst);
+int     ipcp_flow_alloc(const struct flow_info * flow,
+                        const buffer_t           hash,
+                        const buffer_t           data);
 
-int   ipcp_flow_alloc_resp(const struct flow_info * flow,
-                           int                      response,
-                           const buffer_t           data);
+int     ipcp_flow_join(const struct flow_info * flow,
+                       const buffer_t           dst);
 
-int   ipcp_flow_dealloc(pid_t  pid,
-                        int    flow_id,
-                        time_t timeo);
+int     ipcp_flow_alloc_resp(const struct flow_info * flow,
+                             int                      response,
+                             const buffer_t           data);
 
-int   ipcp_flow_update(const struct flow_info * flow,
-                       const buffer_t           data);
+int     ipcp_flow_dealloc(pid_t  pid,
+                          int    flow_id,
+                          time_t timeo);
+
+int     ipcp_flow_update(const struct flow_info * flow,
+                         const buffer_t           data);
 
 #endif /* OUROBOROS_IRMD_IPCP_H */

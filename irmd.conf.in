@@ -7,10 +7,6 @@
 #
 # [name.<name of service>] add a new name to the system.
 # [local.<name for IPCP>] add a new local IPCP to the system.
-# [eth-llc.<name for IPCP>] add a new IPCP over Ethernet (LLC) to the system.
-# [eth-dix.<name for IPCP>] add a new IPCP over Ethernet (DIX) to the system.
-# [udp4.<name for IPCP>] add a new IPCP over UDP/IPv4 to the system.
-# [udp6.<name for IPCP>] add a new IPCP over UDP/IPv6 to the system.
 # [broadcast.<name of IPCP>] add a new broadcast IPCP to the system.
 # [unicast.<name of IPCP>] add a new unicast IPCP to the system.
 #
@@ -32,6 +28,49 @@
 # enrol=<dst>:            Enrol with this neigbor (broadcast and unicast only).
 # conn=[<dst>]:           Create mgmt and data flows with these neighbors.
 # reg=[<names>]:          Register these names with the IPCP.
+#
+# enrol, and each element of conn, also accept a table instead of a bare
+# name, to reach that peer over one specific point of attachment:
+#
+# {dst=<name>, eth={}}                  Resolve dst by query over every
+#                                        attached eth PoA.
+# {dst=<name>, eth={dev=<device>}}      Same, pinned to one device. eth
+#                                        accepts an optional
+#                                        ethertype=<ethertype>, default
+#                                        0xA000.
+# {dst=<name>, udp=<addr>[:<port>]}     Literal peer; IPv4, bracketed IPv6
+#                                        ("[::1]:3435"), bare IPv6, or a
+#                                        host name the IRMd resolves. Port
+#                                        defaults to 3435.
+#
+# A table names at most one of eth or udp; dst is required.
+#
+# A unicast or broadcast IPCP binds its own points of attachment. udp
+# and eth are each an array of strings or tables, one udp for both
+# address families:
+#
+# udp = [<addr>, ...]                   <addr> is a literal IPv4 or
+#                                        IPv6 address, with an optional
+#                                        port ("<addr>:<port>",
+#                                        bracketed for IPv6:
+#                                        "[::1]:3435"). Port defaults
+#                                        to 3435. A table,
+#                                        {addr=<addr>[:<port>]}, is
+#                                        also accepted.
+# eth = [<device>, ...]                 <device> is a bare device
+#                                        name, or a table
+#                                        {dev=<device>[, ethertype=
+#                                        <ethertype>]}. Ethertype
+#                                        defaults to 0xA000.
+#
+# Because a table element is accepted, the array-of-tables spelling
+# still works too, e.g. [[unicast.lan1.udp]] with addr="<addr>" as a
+# separate stanza; repeat the stanza, or the array, to attach more
+# than one PoA.
+#
+# Unlike conn/enrol above, a PoA binds locally: only literal addresses
+# are accepted here, not host names.
+#
 # Bootstrap options can be set as in the examples below.
 # For more details on the configuration options for each of the IPCP types,
 # please refer to the Ouroboros man page.
@@ -57,11 +96,11 @@ prog=["@INSTALL_DIR@/oping"] # Defaults to [].
 args=["--listen"]       # Defaults to disabled. Autostart server with these args.
 lb="round-robin"        # Defaults to spill (load-balancing options: spill, round-robin).
 # server_sec_file=/path/to/sec.conf Default: @OUROBOROS_SRV_CRT_DIR@/<name>/sec.conf
-# server_crt_file=/path/to/crt.pem Default: @OUROBOROS_SRV_CRT_DIR@/<name>/crt.pem
-# server_key_file=/path/to/key.pem Default: @OUROBOROS_SRV_CRT_DIR@/<name>/key.pem
+# server_crt_file=/path/to/crt.pem  Default: @OUROBOROS_SRV_CRT_DIR@/<name>/crt.pem
+# server_key_file=/path/to/key.pem  Default: @OUROBOROS_SRV_CRT_DIR@/<name>/key.pem
 # client_sec_file=/path/to/sec.conf Default: @OUROBOROS_CLI_CRT_DIR@/<name>/sec.conf
-# client_crt_file=/path/to/crt.pem Default: @OUROBOROS_CLI_CRT_DIR@/<name>/crt.pem
-# client_key_file=/path/to/key.pem Default: @OUROBOROS_CLI_CRT_DIR@/<name>/key.pem
+# client_crt_file=/path/to/crt.pem  Default: @OUROBOROS_CLI_CRT_DIR@/<name>/crt.pem
+# client_key_file=/path/to/key.pem  Default: @OUROBOROS_CLI_CRT_DIR@/<name>/key.pem
 
 [local.local1]
 bootstrap="local1"      # Defaults to not set.
@@ -69,34 +108,6 @@ bootstrap="local1"      # Defaults to not set.
 # hash="SHA3_224"       # Defaults to SHA3_256.
    # NAMES KNOWN
 reg=["bc1", "LAN"]      # Defaults to [].
-
-[eth-llc.ethl]
-bootstrap="ethl1"       # Defaults to not set.
-   # BOOTSTRAP CONFIGURATION
-dev="lo"
-# hash="SHA3_224"       # Defaults to SHA3_256.
-
-[eth-dix.eth1]
-bootstrap="eth1"        # Defaults to not set.
-   # BOOTSTRAP CONFIGURATION
-dev="lo"
-# ethertype=0xA007      # Defaults to 0xA000.
-# hash="SHA3_224"       # Defaults to SHA3_256.
-reg=["lan1"]
-
-[udp4.udp1]
-bootstrap="udp"         # Defaults to not set.
-   # BOOTSTRAP CONFIGURATION
-ip="127.0.0.1"
-# port=9000             # Defaults to 3435.
-# dns="127.0.0.1"       # Requires a DDNS server. Disables DDNS support if not set.
-
-[udp6.udp2]
-bootstrap="udp2"         # Defaults to not set.
-   # BOOTSTRAP CONFIGURATION
-ip="::1"
-# port=9000             # Defaults to 3435.
-# dns="::1"             # Requires a DDNS server. Disables DDNS support if not set.
 
 [broadcast.bc1]
 bootstrap="broadcast"   # Defaults to not set.
@@ -130,7 +141,19 @@ autobind=true           # Defaults to false.
    # NAMES KNOWN
 reg=["oping"]           # Defaults to [].
 
+   # POINTS OF ATTACHMENT
+udp = ["127.0.0.1", "127.0.0.1:3436"] # Two PoAs; port defaults to 3435.
+# udp = ["127.0.0.1:9000"]            # Or pick a port explicitly.
+
+[[unicast.lan1.eth]]
+dev="lo"
+# ethertype=0xA007      # Defaults to 0xA000.
+
 [unicast.lan2]
 enrol="LAN"             # Defaults to not set.
+# enrol={dst="LAN", eth={dev="eth0"}}     # Or enrol over a specific PoA.
 conn=["lan1"]           # Defaults to [].
+# conn=["lan1",
+#       {dst="lan3", eth={}},
+#       {dst="lan4", udp="10.0.0.1:3435"}] # Or connect over specific PoAs.
 autobind=true           # Defaults to false.

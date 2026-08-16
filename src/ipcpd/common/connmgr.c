@@ -26,6 +26,7 @@
 #include <ouroboros/dev.h>
 #include <ouroboros/errno.h>
 #include <ouroboros/fccntl.h>
+#include <ouroboros/ipcp-dev.h>
 #include <ouroboros/list.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/notifier.h>
@@ -38,6 +39,10 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define CONNMGR_ETH_PROBE_TIMEO    20  /* ms, one query attempt   */
+#define CONNMGR_ETH_RETRY_TIMEO  1500  /* ms, the remaining tries */
+#define CONNMGR_DHT_TIMEO        1000  /* ms, bounded lower-layer */
 
 struct conn_el {
         struct list_head next;
@@ -59,6 +64,14 @@ struct {
 
         pthread_t          acceptor;
 } connmgr;
+
+static bool is_eth_query(const struct poa_addr * addr)
+{
+        static const uint8_t zero[POA_MAC_SIZE] = { 0 };
+
+        return addr->type == POA_ETH &&
+                memcmp(addr->eth.dst.mac, zero, POA_MAC_SIZE) == 0;
+}
 
 static int get_id_by_name(const char * name)
 {
@@ -121,6 +134,7 @@ static int add_comp_conn(enum comp_id       id,
         return 0;
 }
 
+/* qs is also an in-parameter, and flow_accept writes it back. */
 static void * flow_acceptor(void * o)
 {
         int              fd;
@@ -323,9 +337,10 @@ void connmgr_comp_fini(enum comp_id id)
         memset(&connmgr.comps[id].info, 0, sizeof(connmgr.comps[id].info));
 }
 
-int connmgr_ipcp_connect(const char * dst,
-                         const char * component,
-                         qosspec_t    qs)
+int connmgr_ipcp_connect(const char *            dst,
+                         const char *            component,
+                         qosspec_t               qs,
+                         const struct poa_addr * addr)
 {
         struct conn_el * ce;
         int              id;
@@ -333,6 +348,11 @@ int connmgr_ipcp_connect(const char * dst,
 
         assert(dst);
         assert(component);
+
+        if (qs.service == SVC_STREAM) {
+                log_err("No stream service on component flows.");
+                return -ENOTSUP;
+        }
 
         ce = malloc(sizeof(*ce));
         if (ce == NULL) {
@@ -348,7 +368,7 @@ int connmgr_ipcp_connect(const char * dst,
 
         pthread_cleanup_push(free, ce);
 
-        ret = connmgr_alloc(id, dst, &qs, &ce->conn);
+        ret = connmgr_alloc(id, dst, &qs, addr, &ce->conn);
 
         pthread_cleanup_pop(false);
 
@@ -414,10 +434,46 @@ int connmgr_ipcp_disconnect(const char * dst,
         return 0;
 }
 
-int connmgr_alloc(enum comp_id  id,
-                  const char *  dst,
-                  qosspec_t *   qs,
-                  struct conn * conn)
+/*
+ * Without an address, a peer may be on the wire or reachable through
+ * the layer below. A PoA query is cheap and creates no flow, so it
+ * goes first; the layer below gets a bounded try before the query
+ * retries, and the last try is unbounded.
+ */
+static int alloc_any(const char * dst,
+                     qosspec_t *  qs)
+{
+        struct timespec probe = TIMESPEC_INIT_MS(CONNMGR_ETH_PROBE_TIMEO);
+        struct timespec retry = TIMESPEC_INIT_MS(CONNMGR_ETH_RETRY_TIMEO);
+        struct timespec below = TIMESPEC_INIT_MS(CONNMGR_DHT_TIMEO);
+        struct poa_addr addr;
+        int             fd;
+
+        if (poa_query(dst, &probe, &addr) == 0) {
+                fd = poa_flow_alloc(dst, &addr, qs, NULL);
+                if (fd >= 0)
+                        return fd;
+        }
+
+        fd = flow_alloc(dst, qs, &below);
+        if (fd >= 0)
+                return fd;
+
+        if (poa_query(dst, &retry, &addr) == 0) {
+                fd = poa_flow_alloc(dst, &addr, qs, NULL);
+                if (fd >= 0)
+                        return fd;
+        }
+
+        return flow_alloc(dst, qs, NULL);
+}
+
+/* A literal peer address bypasses the layer below. */
+int connmgr_alloc(enum comp_id            id,
+                  const char *            dst,
+                  qosspec_t *             qs,
+                  const struct poa_addr * addr,
+                  struct conn *           conn)
 {
         struct comp *   comp;
         int             fd;
@@ -428,7 +484,26 @@ int connmgr_alloc(enum comp_id  id,
 
         comp = connmgr.comps + id;
 
-        fd = flow_alloc(dst, qs, NULL);
+        if (addr != NULL)
+                fd = poa_flow_alloc(dst, addr, qs, NULL);
+        else
+                fd = alloc_any(dst, qs);
+
+        if (fd == -EPERM && addr != NULL) {
+                log_err("No PoA attached to reach %s.", dst);
+                goto fail_alloc;
+        }
+
+        if (fd == -EINVAL && addr != NULL) {
+                log_err("More than one PoA could reach %s", dst);
+                goto fail_alloc;
+        }
+
+        if (fd == -ETIMEDOUT && addr != NULL && is_eth_query(addr)) {
+                log_err("No answer to name query for %s.", dst);
+                goto fail_alloc;
+        }
+
         if (fd < 0) {
                 log_err("Failed to allocate flow to %s.", dst);
                 goto fail_alloc;

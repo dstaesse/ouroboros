@@ -43,6 +43,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <inttypes.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <toml.h>
@@ -92,171 +93,173 @@ static int toml_local(toml_table_t *       table,
         return toml_hash(table, &conf->layer_info);
 }
 
-static int toml_eth_dev(toml_table_t *      table,
-                        struct eth_config * conf)
+
+/* Defined with the peer helpers below; shared grammar for both paths. */
+static int toml_udp_str(const char * str,
+                        char *       host,
+                        int *        port);
+
+/* Attach the PoAs an IPCP is given; one call per PoA. */
+static int poa_eth_set(struct poa_spec * poa,
+                       const char *      dev,
+                       uint16_t          ethertype)
+{
+        if (strlen(dev) > DEV_NAME_SIZE) {
+                log_err("Invalid device name %s.", dev);
+                return -1;
+        }
+
+        memset(poa, 0, sizeof(*poa));
+
+        poa->type          = POA_ETH;
+        poa->eth.ethertype = ethertype;
+
+        strcpy(poa->eth.dev, dev);
+
+        return 0;
+}
+
+static int toml_poa_eth(toml_table_t *    tbl,
+                        struct poa_spec * poa)
 {
         toml_datum_t dev;
+        toml_datum_t et;
+        uint16_t     ethertype = POA_ETHERTYPE;
+        int          ret = -1;
 
-        dev = toml_string_in(table, "dev");
+        dev = toml_string_in(tbl, "dev");
         if (!dev.ok) {
-                log_err("Missing device.");
-                return -1;
+                log_err("An eth PoA needs a device.");
+                goto fail;
         }
 
-        if (strlen(dev.u.s) > DEV_NAME_SIZE) {
-                log_err("Device name too long: %s", dev.u.s);
+        et = toml_int_in(tbl, "ethertype");
+        if (et.ok) {
+                if (et.u.i < 0 || et.u.i > 0xFFFF) {
+                        log_err("Invalid ethertype.");
+                        goto fail;
+                }
+
+                ethertype = et.u.i;
+        }
+
+        ret = poa_eth_set(poa, dev.u.s, ethertype);
+ fail:
+        if (dev.ok)
                 free(dev.u.s);
-                return -1;
-        }
 
-        strcpy(conf->dev, dev.u.s);
-        free(dev.u.s);
-
-        return 0;
+        return ret;
 }
 
-static int toml_eth_llc(toml_table_t *       table,
-                        struct ipcp_config * conf)
+/* A PoA is bound locally: only literal addresses are accepted here. */
+static int toml_poa_udp(const char *      str,
+                        struct poa_spec * poa)
 {
-        *conf = eth_llc_default_conf;
+        char host[POA_HOST_STRLEN + 1];
+        int  port;
 
-        if (toml_hash(table, &conf->layer_info) < 0)
+        if (toml_udp_str(str, host, &port) < 0)
                 return -1;
 
-        return toml_eth_dev(table, &conf->eth);
-}
+        memset(poa, 0, sizeof(*poa));
 
-
-static int toml_ethertype(toml_table_t *      table,
-                          struct eth_config * conf)
-{
-        toml_datum_t ethertype;
-
-        ethertype = toml_int_in(table, "ethertype");
-        if (ethertype.ok)
-                conf->ethertype = ethertype.u.i;
-
-        if (conf->ethertype < 0x0600 || conf->ethertype == 0xFFFF)
-                return -1;
-
-        return 0;
-}
-
-static int toml_eth_dix(toml_table_t *       table,
-                        struct ipcp_config * conf)
-{
-        *conf = eth_dix_default_conf;
-
-        if (toml_hash(table, &conf->layer_info) < 0)
-                return -1;
-
-        if (toml_eth_dev(table, &conf->eth) < 0)
-                return -1;
-
-        if (toml_ethertype(table, &conf->eth) < 0) {
-                log_err("Ethertype not in valid range.");
-                return -1;
+        if (inet_pton(AF_INET, host, &poa->udp4.ip_addr.s_addr) == 1) {
+                poa->type      = POA_UDP4;
+                poa->udp4.port = port;
+                return 0;
         }
 
-        return 0;
-}
-
-static int toml_udp4(toml_table_t *       table,
-                     struct ipcp_config * conf)
-{
-        struct udp4_config * udp4;
-        toml_datum_t ip;
-        toml_datum_t port;
-        toml_datum_t dns;
-
-        *conf = udp4_default_conf;
-        udp4 = &conf->udp4;
-
-        ip = toml_string_in(table, "ip");
-        if (!ip.ok) {
-                log_err("No IP address specified!");
-                goto fail_ip;
+        if (inet_pton(AF_INET6, host, &poa->udp6.ip_addr) == 1) {
+                poa->type      = POA_UDP6;
+                poa->udp6.port = port;
+                return 0;
         }
 
-        if (inet_pton (AF_INET, ip.u.s, &udp4->ip_addr.s_addr) != 1) {
-                log_err("Failed to parse IPv4 address %s.", ip.u.s);
-                goto fail_addr;
-        }
+        log_err("Invalid IP address %s.", host);
 
-        port = toml_int_in(table, "port");
-        if (port.ok)
-                udp4->port = port.u.i;
-
-        dns = toml_string_in(table, "dns");
-        if (dns.ok) {
-                if (inet_pton(AF_INET, dns.u.s, &udp4->dns_addr.s_addr) < 0) {
-                        log_err("Failed to parse DNS address %s.", ip.u.s);
-                        goto fail_dns;
-                }
-
-                free(dns.u.s);
-        }
-
-        free(ip.u.s);
-
-        return 0;
-
- fail_dns:
-        free(dns.u.s);
- fail_addr:
-        free(ip.u.s);
- fail_ip:
         return -1;
 }
 
-static int toml_udp6(toml_table_t *       table,
-                     struct ipcp_config * conf)
+/* Attaches every PoA in the "udp" or "eth" array; string or table. */
+static int toml_poa_array(toml_table_t * table,
+                          pid_t          pid,
+                          const char *   key)
 {
-        struct in6_addr ip6;
-        struct in6_addr dns6;
-        toml_datum_t ip;
-        toml_datum_t port;
-        toml_datum_t dns;
+        struct poa_spec poa;
+        toml_array_t *  arr;
+        int             n;
+        int             i;
+        bool            is_eth;
 
-        *conf = udp6_default_conf;
-        ip6  = conf->udp6.ip_addr;
-        dns6 = conf->udp6.dns_addr;
-
-        ip = toml_string_in(table, "ip");
-        if (!ip.ok) {
-                log_err("No IP address specified!");
-                goto fail_ip;
-        }
-
-        if (inet_pton (AF_INET6, ip.u.s, &ip6.s6_addr) != 1) {
-                log_err("Failed to parse IPv4 address %s.", ip.u.s);
-                goto fail_addr;
-        }
-
-        port = toml_int_in(table, "port");
-        if (port.ok)
-                conf->udp6.port = port.u.i;
-
-        dns = toml_string_in(table, "dns");
-        if (dns.ok) {
-                if (inet_pton(AF_INET6, dns.u.s, &dns6.s6_addr) < 0) {
-                        log_err("Failed to parse DNS address %s.", ip.u.s);
-                        goto fail_dns;
+        arr = toml_array_in(table, key);
+        if (arr == NULL) {
+                /* A table here would otherwise attach nothing, silently. */
+                if (toml_table_in(table, key) != NULL) {
+                        log_err("A %s PoA is an array: %s = [...] "
+                                "or [[%s]].", key, key, key);
+                        return -1;
                 }
 
-                free(dns.u.s);
+                return 0;
         }
 
-        free(ip.u.s);
+        is_eth = strcmp(key, "eth") == 0;
+
+        n = toml_array_nelem(arr);
+
+        for (i = 0; i < n; i++) {
+                toml_datum_t s;
+                int          ret;
+
+                s = toml_string_at(arr, i);
+                if (s.ok) {
+                        if (is_eth)
+                                ret = poa_eth_set(&poa, s.u.s,
+                                                  POA_ETHERTYPE);
+                        else
+                                ret = toml_poa_udp(s.u.s, &poa);
+
+                        free(s.u.s);
+                } else {
+                        toml_table_t * d = toml_table_at(arr, i);
+
+                        if (d == NULL) {
+                                log_err("Invalid %s PoA entry.", key);
+                                return -1;
+                        }
+
+                        if (is_eth) {
+                                ret = toml_poa_eth(d, &poa);
+                        } else {
+                                toml_datum_t addr = toml_string_in(d, "addr");
+
+                                if (!addr.ok) {
+                                        log_err("No addr for udp PoA.");
+                                        return -1;
+                                }
+
+                                ret = toml_poa_udp(addr.u.s, &poa);
+                                free(addr.u.s);
+                        }
+                }
+
+                if (ret < 0)
+                        return -1;
+
+                if (attach_ipcp(pid, &poa, true) < 0)
+                        return -1;
+        }
 
         return 0;
+}
 
- fail_dns:
-        free(dns.u.s);
- fail_addr:
-        free(ip.u.s);
- fail_ip:
-        return -1;
+static int toml_attach(toml_table_t * table,
+                       pid_t          pid)
+{
+        if (toml_poa_array(table, pid, "udp") < 0)
+                return -1;
+
+        return toml_poa_array(table, pid, "eth");
 }
 
 static int toml_broadcast(toml_table_t *       table,
@@ -265,15 +268,13 @@ static int toml_broadcast(toml_table_t *       table,
         (void) table;
         (void) conf;
 
-        /* Nothing to do here. */
-
         return 0;
 }
 
 #define BETWEEN(a, b, c) ((a) >= (b) && (a) <= (c))
 #define DHT(conf, x) (conf)->dht.params.x
 static int toml_dir(toml_table_t *      table,
-                     struct dir_config * conf)
+                    struct dir_config * conf)
 {
         toml_datum_t dir;
         toml_datum_t alpha;
@@ -594,6 +595,207 @@ static int toml_register(toml_table_t * table,
         return ret;
 }
 
+/* Fills in a peer's eth PoA; dst MAC stays zero, the resolve marker. */
+static int toml_peer_eth(toml_table_t *    tbl,
+                         struct poa_addr * addr)
+{
+        toml_datum_t dev;
+        toml_datum_t et;
+        int          ret = -1;
+
+        dev = toml_string_in(tbl, "dev");
+
+        memset(addr, 0, sizeof(*addr));
+
+        addr->type = POA_ETH;
+        addr->eth.src.ethertype = POA_ETHERTYPE;
+        addr->eth.dst.ethertype = POA_ETHERTYPE;
+
+        et = toml_int_in(tbl, "ethertype");
+        if (et.ok) {
+                if (et.u.i < 0 || et.u.i > 0xFFFF) {
+                        log_err("Invalid ethertype.");
+                        goto fail;
+                }
+
+                addr->eth.src.ethertype = et.u.i;
+                addr->eth.dst.ethertype = et.u.i;
+        }
+
+        if (dev.ok) {
+                if (strlen(dev.u.s) > DEV_NAME_SIZE) {
+                        log_err("Invalid device name %s.", dev.u.s);
+                        goto fail;
+                }
+
+                strcpy(addr->eth.src.dev, dev.u.s);
+        }
+
+        ret = 0;
+ fail:
+        if (dev.ok)
+                free(dev.u.s);
+
+        return ret;
+}
+
+/* Same grammar as the CLI's udp keyword; see irm_utils.c parse_udp_str. */
+static int toml_udp_str(const char * str,
+                        char *       host,
+                        int *        port)
+{
+        struct in6_addr v6;
+        char            buf[POA_HOST_STRLEN + 1];
+        char *          p;
+        char *          end;
+        long            n;
+
+        *port = POA_UDP_PORT;
+
+        if (strlen(str) > POA_HOST_STRLEN)
+                goto fail;
+
+        strcpy(buf, str);
+
+        if (buf[0] == '[') {
+                p = strchr(buf, ']');
+                if (p == NULL)
+                        goto fail;
+
+                *p++ = '\0';
+
+                strcpy(host, buf + 1);
+
+                if (*p == '\0')
+                        return 0;
+
+                if (*p != ':')
+                        goto fail;
+
+                ++p;
+        } else if (inet_pton(AF_INET6, buf, &v6) == 1) {
+                strcpy(host, buf);
+                return 0;
+        } else {
+                p = strrchr(buf, ':');
+                if (p == NULL) {
+                        strcpy(host, buf);
+                        return 0;
+                }
+
+                *p++ = '\0';
+
+                strcpy(host, buf);
+        }
+
+        n = strtol(p, &end, 10);
+        if (*p == '\0' || *end != '\0' || n < 1 || n > 65535)
+                goto fail;
+
+        *port = (int) n;
+
+        return 0;
+ fail:
+        log_err("Invalid UDP address: %s.", str);
+        return -1;
+}
+
+/* Fills in a peer's udp PoA; an unresolved name is left for the IRMd. */
+static int toml_peer_udp(const char *      str,
+                         struct poa_addr * addr)
+{
+        char host[POA_HOST_STRLEN + 1];
+        int  port;
+
+        if (toml_udp_str(str, host, &port) < 0)
+                return -1;
+
+        memset(addr, 0, sizeof(*addr));
+
+        if (inet_pton(AF_INET, host, &addr->udp4.ip_addr) == 1) {
+                addr->type      = POA_UDP4;
+                addr->udp4.port = port;
+                return 0;
+        }
+
+        if (inet_pton(AF_INET6, host, &addr->udp6.ip_addr) == 1) {
+                addr->type      = POA_UDP6;
+                addr->udp6.port = port;
+                return 0;
+        }
+
+        addr->type      = POA_UDP;
+        addr->udp4.port = port;
+
+        strcpy(addr->hostname, host);
+
+        return 0;
+}
+
+/*
+ * An entry is a name, or a table naming a PoA to reach it over.
+ * On entry, *paddr already points at the caller's struct poa_addr to
+ * fill in. Set to NULL wherever there is no PoA to dial: a bare
+ * dst-only table (recursive lookup) or any parse failure.
+ */
+static int toml_peer(toml_table_t *     tbl,
+                     char *             dst,
+                     struct poa_addr ** paddr)
+{
+        struct poa_addr * addr = *paddr;
+        toml_table_t *    eth;
+        toml_datum_t      name;
+        toml_datum_t      udp;
+        int               ret = -1;
+
+        name = toml_string_in(tbl, "dst");
+        if (!name.ok) {
+                log_err("PoA table entry has no dst.");
+
+                *paddr = NULL;
+                return -1;
+        }
+
+        if (strlen(name.u.s) > LAYER_NAME_SIZE) {
+                log_err("Destination name too long: %s.", name.u.s);
+                free(name.u.s);
+
+                *paddr = NULL;
+                return -1;
+        }
+
+        strcpy(dst, name.u.s);
+        free(name.u.s);
+
+        eth = toml_table_in(tbl, "eth");
+        udp = toml_string_in(tbl, "udp");
+        if (eth != NULL && udp.ok) {
+                log_err("A PoA is eth or udp, not both.");
+
+                *paddr = NULL;
+                goto fail;
+        }
+
+        if (eth == NULL && !udp.ok) {
+                *paddr = NULL;
+                ret = 0;
+                goto fail;
+        }
+
+        if (eth != NULL)
+                ret = toml_peer_eth(eth, addr);
+        else
+                ret = toml_peer_udp(udp.u.s, addr);
+
+        if (ret < 0)
+                *paddr = NULL;
+ fail:
+        if (udp.ok)
+                free(udp.u.s);
+
+        return ret;
+}
+
 static int toml_connect(toml_table_t * table,
                         pid_t          pid)
 {
@@ -605,21 +807,40 @@ static int toml_connect(toml_table_t * table,
         if (conn == NULL)
                 return 0;
 
-        for (i=0; ret == 0; i++) {
-                toml_datum_t dst;
-                qosspec_t    qs = qos_raw;
+        for (i = 0; ret == 0; i++) {
+                toml_datum_t      dst;
+                toml_table_t *    tbl;
+                struct poa_addr   addr;
+                struct poa_addr * paddr = &addr;
+                char              buf[LAYER_NAME_SIZE + 1];
+                const char *      d;
+                qosspec_t         qs = qos_raw;
 
                 dst = toml_string_at(conn, i);
-                if (!dst.ok)
-                        break;
+                if (dst.ok) {
+                        d     = dst.u.s;
+                        paddr = NULL;
+                } else {
+                        tbl = toml_table_at(conn, i);
+                        if (tbl == NULL)
+                                break;
 
-                log_dbg("Connecting %d to %s", pid, dst.u.s);
+                        ret = toml_peer(tbl, buf, &paddr);
+                        if (ret < 0)
+                                break;
 
-                ret = connect_ipcp(pid, dst.u.s, MGMT_COMP, qs);
+                        d = buf;
+                }
+
+                log_dbg("Connecting %d to %s", pid, d);
+
+                ret = connect_ipcp_resolve(pid, d, MGMT_COMP, qs, paddr);
+
                 if (ret == 0)
-                        ret = connect_ipcp(pid, dst.u.s, DT_COMP, qs);
+                        ret = connect_ipcp_resolve(pid, d, DT_COMP, qs, paddr);
 
-                free(dst.u.s);
+                if (dst.ok)
+                        free(dst.u.s);
         }
 
         return ret;
@@ -629,9 +850,11 @@ static int toml_ipcp(toml_table_t *       table,
                      struct ipcp_info *   info,
                      struct ipcp_config * conf)
 {
-        toml_datum_t bootstrap;
-        toml_datum_t enrol;
-        int          ret;
+        toml_datum_t   bootstrap;
+        toml_datum_t   enrol;
+        toml_table_t * enrol_tbl;
+        bool           have_enrol;
+        int            ret;
 
         log_dbg("Found IPCP %s in configuration file.", info->name);
 
@@ -643,21 +866,49 @@ static int toml_ipcp(toml_table_t *       table,
         bootstrap = toml_string_in(table, "bootstrap");
         enrol     = toml_string_in(table, "enrol");
 
-        if (bootstrap.ok && enrol.ok) {
+        enrol_tbl  = enrol.ok ? NULL : toml_table_in(table, "enrol");
+
+        have_enrol = enrol.ok || enrol_tbl != NULL;
+        if (bootstrap.ok && have_enrol) {
                 log_err("Ignoring bootstrap for IPCP %s.", info->name);
                 free(bootstrap.u.s);
                 bootstrap.ok = false;
         }
 
-        if (!bootstrap.ok && !enrol.ok) {
+        if (!bootstrap.ok && !have_enrol) {
                 log_dbg("Nothing more to do for %s.", info->name);
                 return 0;
         }
 
-        if (enrol.ok) {
+        /* Endpoints come first: enrolment reaches the peer over one. */
+        if (toml_attach(table, info->pid) < 0) {
+                log_err("Failed to attach PoAs for %s.", info->name);
+                return -1;
+        }
+
+        if (have_enrol) {
                 struct layer_info layer;
-                ret = enroll_ipcp(info->pid, enrol.u.s);
-                free(enrol.u.s);
+                struct poa_addr   addr;
+                struct poa_addr * paddr = &addr;
+                char              buf[LAYER_NAME_SIZE + 1];
+                const char *      dst;
+
+                if (enrol.ok) {
+                        dst   = enrol.u.s;
+                        paddr = NULL;
+                } else {
+                        if (toml_peer(enrol_tbl, buf, &paddr) < 0) {
+                                log_err("Invalid enrol table for %s.",
+                                        info->name);
+                                return -1;
+                        }
+                        dst = buf;
+                }
+
+                ret = enroll_ipcp_resolve(info->pid, dst, paddr);
+
+                if (enrol.ok)
+                        free(enrol.u.s);
                 if (ret < 0) {
                         log_err("Failed to enrol %s.", info->name);
                         return -1;
@@ -693,18 +944,6 @@ static int toml_ipcp(toml_table_t *       table,
         switch (conf->type) {
         case IPCP_LOCAL:
                 ret = toml_local(table, conf);
-                break;
-        case IPCP_ETH_DIX:
-                ret = toml_eth_dix(table, conf);
-                break;
-        case IPCP_ETH_LLC:
-                ret = toml_eth_llc(table, conf);
-                break;
-        case IPCP_UDP4:
-                ret = toml_udp4(table, conf);
-                break;
-        case IPCP_UDP6:
-                ret = toml_udp6(table, conf);
                 break;
         case IPCP_BROADCAST:
                 ret = toml_broadcast(table, conf);
@@ -1031,14 +1270,6 @@ static int toml_toplevel(toml_table_t * table,
                 return toml_name_list(subtable);
         else if (strcmp(key, "local") == 0)
                 return toml_ipcp_list(subtable, IPCP_LOCAL);
-        else if (strcmp(key, "eth-dix") == 0)
-                return toml_ipcp_list(subtable, IPCP_ETH_DIX);
-        else if (strcmp(key, "eth-llc") == 0)
-                return toml_ipcp_list(subtable, IPCP_ETH_LLC);
-        else if (strcmp(key, "udp4") == 0)
-                return toml_ipcp_list(subtable, IPCP_UDP4);
-        else if (strcmp(key, "udp6") == 0)
-                return toml_ipcp_list(subtable, IPCP_UDP6);
         else if (strcmp(key, "broadcast") == 0)
                 return toml_ipcp_list(subtable, IPCP_BROADCAST);
         else if (strcmp(key, "unicast") == 0)

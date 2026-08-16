@@ -2,6 +2,7 @@
 
 add_executable(${IPCP_LOCAL_TARGET}
   main.c
+  reg.c
   ${IPCP_SOURCES}
 )
 

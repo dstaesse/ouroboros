@@ -11,6 +11,7 @@ create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
   bitmap_test.c
   btree_test.c
   crypt_test.c
+  poa_test.c
   hash_test.c
   kex_test.c
   kex_test_ml_kem.c
@@ -24,6 +25,12 @@ create_test_sourcelist(${PARENT_DIR}_tests test_suite.c
   )
 
 add_executable(${PARENT_DIR}_test ${${PARENT_DIR}_tests})
+
+if(HAVE_LIBURCU)
+  # poa_test.c pulls in poa.h, whose urcu guard needs C99.
+  set_source_files_properties(poa_test.c PROPERTIES
+    COMPILE_OPTIONS "-std=gnu99")
+endif()
 
 target_include_directories(${PARENT_DIR}_test PRIVATE
   ${CMAKE_SOURCE_DIR}/src/lib)

@@ -44,6 +44,7 @@
 #include "irm_ops.h"
 #include "irm_utils.h"
 
+#include <arpa/inet.h>
 #include <string.h>
 
 #define UNICAST    "unicast"
@@ -57,7 +58,10 @@ static void usage(void)
                "                [dst <destination to enroll with>]\n"
                "                [type [TYPE], default = " UNICAST "]\n"
                "                [autobind]\n"
-               "where TYPE in {" UNICAST " " BROADCAST "}\n");
+               "                [udp [UDP_PEER]]\n"
+               "                [eth [dev <device>] [ethertype <ethertype>]]\n"
+               "where TYPE in {" UNICAST " " BROADCAST "}\n"
+               "and UDP_PEER is <IP address or host>[:<port>]\n");
 }
 
 static int get_layer_name(const char * ipcp,
@@ -86,6 +90,12 @@ int do_enroll_ipcp(int     argc,
         char *                  ipcp      = NULL;
         char *                  layer     = NULL;
         char *                  dst       = NULL;
+        char *                  udpstr    = NULL;
+        char *                  devstr    = NULL;
+        uint16_t                ethertype = POA_ETHERTYPE;
+        bool                    eth       = false;
+        struct poa_addr         addr;
+        struct poa_addr *       pa        = NULL;
         struct ipcp_list_info * ipcps;
         pid_t                   pid       = -1;
         ssize_t                 len       = 0;
@@ -97,14 +107,37 @@ int do_enroll_ipcp(int     argc,
 
         while (argc > 0) {
                 cargs = 2;
+                if (strcmp(*argv, "eth") == 0)
+                        cargs = 1;
+                else if (matches(*argv, "autobind") == 0)
+                        cargs = 1;
+
+                if (argc < cargs) {
+                        usage();
+                        return -1;
+                }
+
                 if (matches(*argv, "name") == 0) {
                         ipcp = *(argv + 1);
                 } else if (matches(*argv, "type") == 0) {
                         ipcp_type = *(argv + 1);
                 } else if (matches(*argv, "layer") == 0) {
                         layer = *(argv + 1);
-                } else if (matches(*argv, "dst") == 0) {
+                } else if (strcmp(*argv, "dst") == 0) {
                         dst = *(argv + 1);
+                } else if (strcmp(*argv, "udp") == 0) {
+                        udpstr = *(argv + 1);
+                } else if (strcmp(*argv, "dev") == 0) {
+                        devstr = *(argv + 1);
+                } else if (strcmp(*argv, "ethertype") == 0) {
+                        if (parse_ethertype(*(argv + 1), &ethertype) < 0) {
+                                printf("Invalid ethertype: \"%s\".\n",
+                                       *(argv + 1));
+                                return -1;
+                        }
+                } else if (strcmp(*argv, "eth") == 0) {
+                        eth = true;
+                        cargs = 1;
                 } else if (matches(*argv, "autobind") == 0) {
                         autobind = true;
                         cargs = 1;
@@ -125,6 +158,25 @@ int do_enroll_ipcp(int     argc,
 
         if (dst == NULL)
                 dst = layer;
+
+        memset(&addr, 0, sizeof(addr));
+
+        if (udpstr != NULL) {
+                if (poa_addr_set_udp(&addr, udpstr) < 0)
+                        return -1;
+                pa = &addr;
+        }
+
+        if (eth) {
+                if (udpstr != NULL) {
+                        printf("Enroll via udp or eth, not both.\n");
+                        return -1;
+                }
+
+                if (poa_addr_set_eth(&addr, devstr, ethertype) < 0)
+                        return -1;
+                pa = &addr;
+        }
 
         if (strcmp(ipcp_type, UNICAST) == 0)
                 type = IPCP_UNICAST;
@@ -155,7 +207,7 @@ int do_enroll_ipcp(int     argc,
 
                 pid = ipcps[i].pid;
 
-                if (irm_enroll_ipcp(pid, dst)) {
+                if (irm_enroll_ipcp(pid, dst, pa) < 0) {
                         printf("Failed to enroll IPCP.\n");
                         goto fail;
                 }

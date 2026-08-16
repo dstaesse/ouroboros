@@ -24,6 +24,7 @@
 #define OUROBOROS_IPCPD_COMMON_CONNMGR_H
 
 #include <ouroboros/cep.h>
+#include <ouroboros/ipcp.h>
 #include <ouroboros/qos.h>
 
 #include "comp.h"
@@ -53,17 +54,19 @@ int         connmgr_comp_init(enum comp_id             id,
 
 void        connmgr_comp_fini(enum comp_id id);
 
-int         connmgr_ipcp_connect(const char * dst,
-                                 const char * component,
-                                 qosspec_t    qs);
+int         connmgr_ipcp_connect(const char *            dst,
+                                 const char *            component,
+                                 qosspec_t               qs,
+                                 const struct poa_addr * addr);
 
 int         connmgr_ipcp_disconnect(const char * dst,
                                     const char * component);
 
-int         connmgr_alloc(enum comp_id  id,
-                          const char *  dst,
-                          qosspec_t *   qs,
-                          struct conn * conn);
+int         connmgr_alloc(enum comp_id            id,
+                          const char *            dst,
+                          qosspec_t *             qs,
+                          const struct poa_addr * addr,
+                          struct conn *           conn);
 
 int         connmgr_dealloc(enum comp_id  id,
                             struct conn * conn);

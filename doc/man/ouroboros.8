@@ -98,10 +98,13 @@ accessed by other processes.
 In order to enroll an IPC process in a layer, some other member will
 have to be reachable over a lower layer. IPCPs that wrap a legacy
 transmission technology are all bootstrapped and thus need not enroll
-as they work directly over a physical connection. Ouroboros currently
-supports IPCPs over shared memory (local), L2 (eth-llc and eth-dix)
-and L3 (udp). The unicast and broadcast layers require connections to
-be established between IPCP components for its operation.
+as they work directly over a physical connection. A unicast or
+broadcast IPCP attaches to a transmission technology itself, as a
+\fIpoint of attachment\fR (PoA); Ouroboros currently supports PoAs on
+L2 (Ethernet) and L3 (UDP/IPv4 and UDP/IPv6), next to IPCPs over
+shared memory (local). The unicast and broadcast layers require
+connections to be established between IPCP components for its
+operation.
 
 \fBConnecting the management components\fR using \fImanagement
 flows\fR allows management information to be sent between IPCPs so
@@ -122,14 +125,6 @@ creates an IPCP process of type \fItype\fR in the system with name
 \fIname\fR. Allowable values for \fItype\fR are:
 .PP
 \fBlocal\fR     - create a loopback IPCP.
-.PP
-\fBeth-llc\fR   - create an IPCP that attaches to Ethernet using LLC frames.
-.PP
-\fBeth-dix\fR   - create an IPCP that attaches to Ethernet using DIX frames.
-.PP
-\fBudp4\fR       - create an IPCP that attaches to a UDP/IPv4 socket.
-.PP
-\fBudp6\fR       - create an IPCP that attaches to a UDP/IPv6 socket.
 .PP
 \fBunicast\fR   - create a unicast IPCP that uses lower level layers.
 .PP
@@ -161,69 +156,9 @@ Values for [\fIparam\fR] are dependent on \fItype\fR:
 default: SHA3_256.
 .RE
 
-.PP
-\fBeth-llc\fR
-.RS 4
-.PP
-dev \fIinterface\fR specifies the interface to bind the IPCP to.
-.PP
-[hash \fIpolicy\fR] specifies the hash function used for the directory,
-.br
-\fIpolicy\fR: SHA3_224, SHA3_256, SHA3_384, SHA3_512.
-.br
-default: SHA3_256.
-.RE
 
-.PP
-\fBeth-dix\fR
-.RS 4
-.PP
-dev \fIinterface\fR specifies the interface to bind the IPCP to.
-.PP
-[ethertype \fIethertype\fR] specifies the ethertype used for the layer.
-.br
-default: 0xA000.
-.PP
-[hash \fIpolicy\fR] specifies the hash function used for the directory,
-.br
-\fIpolicy\fR: SHA3_224, SHA3_256, SHA3_384, SHA3_512.
-.br
-default: SHA3_256.
-.RE
 
-.PP
-\fBudp4\fR
-.RS 4
-.PP
-ip \fIip\fR specifies the local IPv4 address to bind to
-.PP
-[dns \fIdns\fR] specifies an optional DDNS server that will be used for
-the directory.
-.PP
-[port \fIport\fR] specifies a UDP port that is used for sending and
-receiving ouroboros traffic. This must be the same for the entire UDP4
-layer. Parallel UDP4 layers should use different ports. This UDP port
-needs to be forwarded if the server is behind a NAT and wants to
-receive incoming requests.
-.br
-default: 3435
-.RE
 
-.PP
-\fBudp6\fR
-.RS 4
-.PP
-ip \fIip\fR specifies the local IPv6 address to bind to
-.PP
-[dns \fIdns\fR] specifies an optional DDNS server that will be used for
-the directory.
-.PP
-[port \fIport\fR] specifies a UDP port that is used for sending and
-receiving ouroboros traffic. This must be the same for the entire UDP6
-layer. Parallel UDP6 layers should use different ports.
-.br
-default: 3435
-.RE
 
 .PP
 \fBunicast\fR
@@ -293,6 +228,38 @@ default: SHA3_256.
 .RE
 
 .PP
+\fBirm ipcp poa attach\fR name \fIname\fR \fIpoa\fR
+.RS 4
+attaches the IPCP with name \fIname\fR to a point of attachment.
+Repeat to attach more than one. Exactly one \fIpoa\fR is given:
+.PP
+udp \fIip\fR[:\fIport\fR] attaches to a local IPv4 or IPv6 address.
+IPv6 addresses need brackets when a port is given: [\fIip\fR]:\fIport\fR.
+.br
+default port: 3435.
+.PP
+eth dev \fIdevice\fR [ethertype \fIethertype\fR] attaches to an Ethernet
+device.
+.br
+default: 0xA000.
+.RE
+
+.PP
+\fBirm ipcp poa detach\fR name \fIname\fR \fIpoa\fR
+.RS 4
+releases a point of attachment that the IPCP with name \fIname\fR is
+attached to. Flows over it are brought down first. \fIpoa\fR takes the
+same values as for \fBattach\fR.
+.RE
+
+.PP
+\fBirm ipcp poa list\fR name \fIname\fR
+.RS 4
+lists the points of attachment that the IPCP with name \fIname\fR is
+attached to.
+.RE
+
+.PP
 \fBirm ipcp enroll\fR name \fIname\fR [type \fItype\fR] [dst \fIdst\fR] \
 [layer \fIlayer\fR] [\fIautobind\fR]
 .RS 4
@@ -308,6 +275,15 @@ the layer name is a shorthand for the destination name being the same
 as the layer name.
 .PP
 [autobind] will automatically bind this IPCP to its name and the layer name.
+.PP
+[udp \fIip\fR[:\fIport\fR]] enrols over a point of attachment this
+IPCP is attached to, at a peer reachable at this IPv4 or IPv6 address
+or host name.
+.PP
+[eth [dev \fIdevice\fR] [ethertype \fIethertype\fR]] enrols over a
+point of attachment this IPCP is attached to, resolving the peer by a
+name query over Ethernet. [dev \fIdevice\fR] restricts the query to
+one attached device.
 .RE
 
 \fBirm ipcp connect\fR name \fIname\fR component \fIcomponent\fR dst
@@ -316,6 +292,18 @@ as the layer name.
 connects a \fIcomponent\fR (\fBdt\fR or \fBmgmt\fR) of a unicast or
 broadcast IPCP with name \fIname\fR to that component of the
 destination IPCP within the same layer.
+.PP
+[qos \fIqos\fR] specifies the QoS cube for a \fBdt\fR flow: raw, safe,
+rt, rt-safe or msg.
+.PP
+[udp \fIip\fR[:\fIport\fR]] connects over a point of attachment
+this IPCP is attached to, to a peer reachable at this IPv4 or IPv6
+address or host name.
+.PP
+[eth [dev \fIdevice\fR] [ethertype \fIethertype\fR]] connects over a
+point of attachment this IPCP is attached to, resolving the peer by a
+name query over Ethernet. [dev \fIdevice\fR] restricts the query to
+one attached device.
 .RE
 
 \fBirm ipcp disconnect\fR name \fIname\fR component \fIcomponent\fR dst

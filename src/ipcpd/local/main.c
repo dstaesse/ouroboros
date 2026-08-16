@@ -42,7 +42,7 @@
 
 #include "ipcp.h"
 #include "np1.h"
-#include "shim-data.h"
+#include "reg.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -53,14 +53,14 @@
 #define THIS_TYPE IPCP_LOCAL
 
 struct {
-        struct shim_data * shim_data;
+        struct reg *     reg;
 
-        int                in_out[SYS_MAX_FLOWS];
-        fset_t *           flows;
-        fqueue_t *         fq;
+        int              in_out[SYS_MAX_FLOWS];
+        fset_t *         flows;
+        fqueue_t *       fq;
 
-        pthread_rwlock_t   lock;
-        pthread_t          packet_loop;
+        pthread_rwlock_t lock;
+        pthread_t        packet_loop;
 } local_data;
 
 static int local_data_init(void)
@@ -77,9 +77,9 @@ static int local_data_init(void)
         if (local_data.fq == NULL)
                 goto fail_fqueue;
 
-        local_data.shim_data = shim_data_create();
-        if (local_data.shim_data == NULL)
-                goto fail_shim_data;
+        local_data.reg = reg_create();
+        if (local_data.reg == NULL)
+                goto fail_reg;
 
         if (pthread_rwlock_init(&local_data.lock, NULL) < 0)
                 goto fail_rwlock_init;
@@ -87,8 +87,8 @@ static int local_data_init(void)
         return 0;
 
  fail_rwlock_init:
-        shim_data_destroy(local_data.shim_data);
- fail_shim_data:
+        reg_destroy(local_data.reg);
+ fail_reg:
         fqueue_destroy(local_data.fq);
  fail_fqueue:
         fset_destroy(local_data.flows);
@@ -98,7 +98,7 @@ static int local_data_init(void)
 
 static void local_data_fini(void){
         pthread_rwlock_destroy(&local_data.lock);
-        shim_data_destroy(local_data.shim_data);
+        reg_destroy(local_data.reg);
         fqueue_destroy(local_data.fq);
         fset_destroy(local_data.flows);
 }
@@ -166,7 +166,7 @@ static int local_ipcp_bootstrap(struct ipcp_config * conf)
 
 static int local_ipcp_reg(const uint8_t * hash)
 {
-        if (shim_data_reg_add_entry(local_data.shim_data, hash)) {
+        if (reg_add(local_data.reg, hash) < 0) {
                 log_err("Failed to add " HASH_FMT32 " to local registry.",
                         HASH_VAL32(hash));
                 return -1;
@@ -177,7 +177,7 @@ static int local_ipcp_reg(const uint8_t * hash)
 
 static int local_ipcp_unreg(const uint8_t * hash)
 {
-        shim_data_reg_del_entry(local_data.shim_data, hash);
+        reg_del(local_data.reg, hash);
 
         log_info("Unregistered " HASH_FMT32 ".",  HASH_VAL32(hash));
 
@@ -188,7 +188,7 @@ static int local_ipcp_query(const uint8_t * hash)
 {
         int ret;
 
-        ret = (shim_data_reg_has(local_data.shim_data, hash) ? 0 : -1);
+        ret = (reg_has(local_data.reg, hash) ? 0 : -1);
 
         return ret;
 }

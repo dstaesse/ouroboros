@@ -79,10 +79,43 @@
 #ifndef OUROBOROS_TOOLS_IRM_UTILS_H
 #define OUROBOROS_TOOLS_IRM_UTILS_H
 
-int matches(const char * cmd,
-            const char * pattern);
+#include <ouroboros/ipcp.h>
 
-int wildcard_match(const char * pattern,
-                   const char * string);
+#include <arpa/inet.h>
+
+#include <stdint.h>
+
+int  matches(const char * cmd,
+             const char * pattern);
+
+int  wildcard_match(const char * pattern,
+                    const char * string);
+
+/* Fill one PoA to attach or detach: an address or a device. */
+int  poa_spec_set(struct poa_spec * poa,
+                  const char *      udpstr,
+                  const char *      devstr,
+                  uint16_t          ethertype);
+
+/* Fill a peer PoA address; a host name is resolved by the IRMd. */
+int  poa_addr_set_udp(struct poa_addr * addr,
+                      const char *      str);
+
+/* Fits "eth <dev> 0x<type>", the longest PoA rendering. */
+/* Matches src/ipcpd/ipcp.c; keep in sync. */
+#define POA_STRLEN (DEV_NAME_SIZE + 11)
+
+/* Names a PoA the way the IPCP logs it. */
+void poa_spec_str(const struct poa_spec * poa,
+                  char *                  buf,
+                  size_t                  len);
+
+int  poa_addr_set_eth(struct poa_addr * addr,
+                      const char *      devstr,
+                      uint16_t          ethertype);
+
+/* Parses a hex ethertype; rejects garbage and out-of-range values. */
+int  parse_ethertype(const char * str,
+                     uint16_t *   ethertype);
 
 #endif /* OUROBOROS_TOOLS_IRM_UTILS_H */

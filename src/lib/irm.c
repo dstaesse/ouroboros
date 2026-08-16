@@ -118,6 +118,8 @@ int irm_bootstrap_ipcp(pid_t                      pid,
         msg.has_pid = true;
         msg.pid     = pid;
         msg.conf    = ipcp_config_s_to_msg(conf);
+        if (msg.conf == NULL)
+                return -ENOMEM;
 
         recv_msg = send_recv_irm_msg(&msg);
         ipcp_config_msg__free_unpacked(msg.conf, NULL);
@@ -135,10 +137,11 @@ int irm_bootstrap_ipcp(pid_t                      pid,
         return ret;
 }
 
-int irm_connect_ipcp(pid_t        pid,
-                     const char * dst,
-                     const char * component,
-                     qosspec_t    qs)
+int irm_connect_ipcp(pid_t                   pid,
+                     const char *            dst,
+                     const char *            component,
+                     qosspec_t               qs,
+                     const struct poa_addr * addr)
 {
         irm_msg_t     msg = IRM_MSG__INIT;
         irm_msg_t *   recv_msg;
@@ -152,7 +155,18 @@ int irm_connect_ipcp(pid_t        pid,
         msg.pid       = pid;
         msg.qosspec   = qos_spec_s_to_msg(&qs);
 
+        if (addr != NULL) {
+                msg.peer = poa_addr_s_to_msg(addr);
+                if (msg.peer == NULL) {
+                        qosspec_msg__free_unpacked(msg.qosspec, NULL);
+                        return -ENOMEM;
+                }
+        }
+
         recv_msg = send_recv_irm_msg(&msg);
+
+        if (msg.peer != NULL)
+                poa_addr_msg__free_unpacked(msg.peer, NULL);
         qosspec_msg__free_unpacked(msg.qosspec, NULL);
 
         if (recv_msg == NULL)
@@ -245,8 +259,99 @@ ssize_t irm_list_ipcps(struct ipcp_list_info ** ipcps)
         return nr;
 }
 
-int irm_enroll_ipcp(pid_t        pid,
-                    const char * dst)
+static int irm_attach_detach(pid_t                   pid,
+                             const struct poa_spec * poa,
+                             int                     code)
+{
+        irm_msg_t   msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg;
+        int         ret;
+
+        if (pid == -1 || poa == NULL)
+                return -EINVAL;
+
+        msg.code     = code;
+        msg.has_pid  = true;
+        msg.pid      = pid;
+        msg.poa = poa_spec_s_to_msg(poa);
+        if (msg.poa == NULL)
+                return -EINVAL;
+
+        recv_msg = send_recv_irm_msg(&msg);
+
+        poa_spec_msg__free_unpacked(msg.poa, NULL);
+
+        if (recv_msg == NULL)
+                return -EIRMD;
+
+        if (!recv_msg->has_result) {
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return -EIRMD;
+        }
+
+        ret = recv_msg->result;
+
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
+}
+
+ssize_t irm_list_poas(pid_t              pid,
+                      struct poa_spec ** poas)
+{
+        irm_msg_t   msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg;
+        size_t      nr;
+        size_t      i;
+
+        if (pid == -1 || poas == NULL)
+                return -EINVAL;
+
+        *poas = NULL;
+
+        msg.code    = IRM_MSG_CODE__IRM_LIST_POAS;
+        msg.has_pid = true;
+        msg.pid     = pid;
+
+        recv_msg = send_recv_irm_msg(&msg);
+        if (recv_msg == NULL)
+                return -EIRMD;
+
+        nr = recv_msg->n_poas;
+        if (nr == 0) {
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return 0;
+        }
+
+        *poas = malloc(nr * sizeof(**poas));
+        if (*poas == NULL) {
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return -ENOMEM;
+        }
+
+        for (i = 0; i < nr; i++)
+                (*poas)[i] = poa_spec_msg_to_s(recv_msg->poas[i]);
+
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+        return (ssize_t) nr;
+}
+
+int irm_attach_ipcp(pid_t                   pid,
+                    const struct poa_spec * poa)
+{
+        return irm_attach_detach(pid, poa, IRM_MSG_CODE__IRM_ATTACH_IPCP);
+}
+
+int irm_detach_ipcp(pid_t                   pid,
+                    const struct poa_spec * poa)
+{
+        return irm_attach_detach(pid, poa, IRM_MSG_CODE__IRM_DETACH_IPCP);
+}
+
+int irm_enroll_ipcp(pid_t                   pid,
+                    const char *            dst,
+                    const struct poa_addr * addr)
 {
         irm_msg_t   msg      = IRM_MSG__INIT;
         irm_msg_t * recv_msg = NULL;
@@ -260,7 +365,17 @@ int irm_enroll_ipcp(pid_t        pid,
         msg.pid          = pid;
         msg.dst          = (char *) dst;
 
+        if (addr != NULL) {
+                msg.peer = poa_addr_s_to_msg(addr);
+                if (msg.peer == NULL)
+                        return -ENOMEM;
+        }
+
         recv_msg = send_recv_irm_msg(&msg);
+
+        if (msg.peer != NULL)
+                poa_addr_msg__free_unpacked(msg.peer, NULL);
+
         if (recv_msg == NULL)
                 return -EIRMD;
 

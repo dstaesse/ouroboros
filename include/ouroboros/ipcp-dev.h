@@ -24,55 +24,106 @@
 #define OUROBOROS_LIB_IPCP_DEV_H
 
 #include <ouroboros/ipcp.h>
+#include <ouroboros/qos.h>
 #include <ouroboros/qoscube.h>
 #include <ouroboros/ssm_pool.h>
 #include <ouroboros/utils.h>
 
+#include <stdbool.h>
 #include <stdint.h>
+#include <time.h>
 
-int    ipcp_create_r(const struct ipcp_info * info);
+int     ipcp_create_r(const struct ipcp_info * info);
 
-int    ipcp_flow_req_arr(const buffer_t * dst,
-                         qosspec_t        qs,
-                         time_t           mpl,
-                         uint32_t         mtu,
-                         const buffer_t * data);
+int     ipcp_flow_req_arr(const buffer_t * dst,
+                          qosspec_t        qs,
+                          time_t           mpl,
+                          uint32_t         mtu,
+                          const buffer_t * data);
 
-int    ipcp_flow_update_arr(int              flow_id,
-                            const buffer_t * data);
-
-int    ipcp_flow_alloc_reply(int              fd,
-                             int              response,
-                             time_t           mpl,
-                             uint32_t         mtu,
+int     ipcp_flow_update_arr(int              flow_id,
                              const buffer_t * data);
 
-int    ipcp_flow_read(int                   fd,
-                      struct ssm_pk_buff ** spb);
+int     ipcp_flow_alloc_reply(int              fd,
+                              int              response,
+                              time_t           mpl,
+                              uint32_t         mtu,
+                              const buffer_t * data);
 
-int    ipcp_flow_write(int                  fd,
-                       struct ssm_pk_buff * spb);
+int     ipcp_flow_read(int                   fd,
+                       struct ssm_pk_buff ** spb);
 
-int    np1_flow_read(int                   fd,
-                     struct ssm_pk_buff ** spb,
-                     struct ssm_pool *     pool);
+int     ipcp_flow_write(int                  fd,
+                        struct ssm_pk_buff * spb);
 
-int    np1_flow_write(int                  fd,
-                      struct ssm_pk_buff * spb,
-                      struct ssm_pool *    pool);
+int     np1_flow_read(int                   fd,
+                      struct ssm_pk_buff ** spb,
+                      struct ssm_pool *     pool);
 
-int    ipcp_flow_dealloc(int fd);
+int     np1_flow_write(int                  fd,
+                       struct ssm_pk_buff * spb,
+                       struct ssm_pool *    pool);
 
-int    ipcp_flow_fini(int fd);
+int     ipcp_flow_dealloc(int fd);
 
-int    ipcp_flow_get_qoscube(int         fd,
-                             qoscube_t * cube);
+int     ipcp_flow_fini(int fd);
 
-size_t ipcp_flow_queued(int fd);
+int     ipcp_flow_get_qoscube(int         fd,
+                              qoscube_t * cube);
 
-int    ipcp_spb_reserve(struct ssm_pk_buff ** spb,
-                        size_t                len);
+size_t  ipcp_flow_queued(int fd);
 
-void   ipcp_spb_release(struct ssm_pk_buff * spb);
+/*
+ * Identifies the transmit queue behind the flow. Flows attached to
+ * one point of attachment share a queue and answer the same id.
+ */
+int     ipcp_flow_queue_id(int fd);
+
+int     ipcp_spb_reserve(struct ssm_pk_buff ** spb,
+                         size_t                len);
+
+void    ipcp_spb_release(struct ssm_pk_buff * spb);
+
+/* PoA lifecycle; an IPCP owns its PoAs, applications have none. */
+int     poa_init(const char * name);
+
+int     poa_start(void);
+
+void    poa_stop(void);
+
+void    poa_fini(void);
+
+/* Also answer name queries for the layer; set at bootstrap/enroll. */
+int     poa_set_layer(const char * layer);
+
+/* Attach or release a PoA; the type in the spec picks the transport. */
+int     poa_attach(const struct poa_spec * poa);
+
+int     poa_detach(const struct poa_spec * poa);
+
+/* The PoAs this process has attached. */
+ssize_t poa_list(struct poa_spec * specs,
+                 size_t            max);
+
+/* Allocate a flow to dst over the PoA that carries addr. */
+int     poa_flow_alloc(const char *            dst,
+                       const struct poa_addr * addr,
+                       qosspec_t *             qs,
+                       const struct timespec * timeo);
+
+/* Resolve dst on the attached PoAs; no flow is created. */
+int     poa_query(const char *            dst,
+                  const struct timespec * timeo,
+                  struct poa_addr *       addr);
+
+/* PoA counterparts of the ipcp_flow_* operations */
+int     poa_flow_alloc_resp(int              flow_id,
+                            int              response,
+                            const buffer_t * data);
+
+int     poa_flow_update(int              flow_id,
+                        const buffer_t * data);
+
+int     poa_flow_dealloc(int flow_id);
 
 #endif /* OUROBOROS_LIB_IPCP_DEV_H */

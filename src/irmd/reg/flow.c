@@ -126,6 +126,9 @@ static int create_rbuffs(struct reg_flow *  flow,
         assert(flow->n_1_rb == NULL);
 
         flow->info.n_1_pid = info->n_1_pid;
+        if (flow->poa)
+                return 0;
+
         flow->n_1_rb = ssm_rbuff_create(info->n_1_pid, info->id);
         if (flow->n_1_rb == NULL)
                 goto fail_n_1_rb;

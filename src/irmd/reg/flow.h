@@ -48,6 +48,8 @@ struct reg_flow {
         char               name[NAME_SIZE + 1];
 
         bool               direct;
+        bool               poa;     /* transport is a point of attachment */
+        void *             oap_ctx; /* key exchange, prepare -> complete  */
 
         /* Tier-2 re-key state (encrypted flows only) */
         struct {

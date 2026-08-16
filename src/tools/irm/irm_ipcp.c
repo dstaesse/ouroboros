@@ -46,6 +46,7 @@ static void usage(void)
         printf("Usage: irm ipcp [OPERATION]\n\n"
                "where OPERATION in {create destroy\n"
                "                    bootstrap enroll\n"
+               "                    poa\n"
                "                    connect disconnect\n"
                "                    list\n"
                "                    help}\n");
@@ -68,6 +69,7 @@ static const struct cmd {
         { "destroy",    do_destroy_ipcp },
         { "bootstrap",  do_bootstrap_ipcp },
         { "enroll",     do_enroll_ipcp },
+        { "poa",        poa_cmd },
         { "connect",    do_connect_ipcp },
         { "disconnect", do_disconnect_ipcp },
         { "list",       do_list_ipcp},

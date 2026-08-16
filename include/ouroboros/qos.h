@@ -30,9 +30,9 @@
 
 /* qos_spec.service: framing / reliability class. */
 enum qos_service {
-        SVC_RAW     = 0, /* No FRCT; best-effort raw messages       */
-        SVC_MESSAGE = 1, /* FRCT, reliable ordered messages         */
-        SVC_STREAM  = 2, /* FRCT, reliable ordered byte stream      */
+        SVC_RAW     = 0, /* No FRCT; best-effort raw messages            */
+        SVC_MESSAGE = 1, /* FRCT, ordered messages, optional reliability */
+        SVC_STREAM  = 2, /* FRCT, reliable ordered byte stream           */
 };
 
 typedef struct qos_spec {

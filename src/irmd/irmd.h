@@ -26,29 +26,48 @@
 #include <ouroboros/ipcp.h>
 #include <ouroboros/irm.h>
 
-int create_ipcp(struct ipcp_info * info);
+int     create_ipcp(struct ipcp_info * info);
 
-int bootstrap_ipcp(pid_t                pid,
-                   struct ipcp_config * conf);
+int     bootstrap_ipcp(pid_t                pid,
+                       struct ipcp_config * conf);
 
-int enroll_ipcp(pid_t        pid,
-                const char * dst);
+int     enroll_ipcp(pid_t                   pid,
+                    const char *            dst,
+                    const struct poa_addr * addr);
 
-int connect_ipcp(pid_t        pid,
-                 const char * dst,
-                 const char * component,
-                 qosspec_t    qs);
+int     enroll_ipcp_resolve(pid_t             pid,
+                            const char *      dst,
+                            struct poa_addr * addr);
 
-int name_create(struct name_info * info);
+int     attach_ipcp(pid_t                   pid,
+                    const struct poa_spec * poa,
+                    bool                    attach);
 
-int name_reg(const char * name,
-             pid_t        pid);
+ssize_t list_poas(pid_t              pid,
+                  struct poa_spec ** eps);
 
-int bind_process(pid_t        pid,
-                 const char * name);
+int     connect_ipcp(pid_t                   pid,
+                     const char *            dst,
+                     const char *            component,
+                     qosspec_t               qs,
+                     const struct poa_addr * addr);
 
-int bind_program(char **      exec,
-                 const char * name,
-                 uint8_t      flags);
+int     connect_ipcp_resolve(pid_t             pid,
+                             const char *      dst,
+                             const char *      component,
+                             qosspec_t         qs,
+                             struct poa_addr * addr);
+
+int     name_create(struct name_info * info);
+
+int     name_reg(const char * name,
+                 pid_t        pid);
+
+int     bind_process(pid_t        pid,
+                     const char * name);
+
+int     bind_program(char **      exec,
+                     const char * name,
+                     uint8_t      flags);
 
 #endif /* OUROBOROS_IRMD_H*/

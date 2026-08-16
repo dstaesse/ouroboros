@@ -25,6 +25,7 @@
 #define SYS_MAX_FLOWS       @SYS_MAX_FLOWS@
 #define PROC_RES_FDS        @PROC_RES_FDS@
 #define PROC_MAX_FLOWS      @PROC_MAX_FLOWS@
+#define POA_MAX_POAS        @POA_MAX_POAS@
 
 #define SOCKET_TIMEOUT      @SOCKET_TIMEOUT@
 #define CONNECT_TIMEOUT     @CONNECT_TIMEOUT@
@@ -54,36 +55,12 @@
 #cmakedefine DISABLE_CORE_LOCK
 #cmakedefine BUILD_CONTAINER
 #cmakedefine IPCP_FLOW_STATS
-#cmakedefine IPCP_ETH_FLOW_STATS
 #cmakedefine IPCP_DEBUG_LOCAL
 #ifdef CONFIG_OUROBOROS_DEBUG
 #cmakedefine DEBUG_PROTO_DHT
 #cmakedefine DEBUG_PROTO_OEP
 #cmakedefine DEBUG_PROTO_LS
 #endif
-
-/* udp */
-#cmakedefine HAVE_DDNS
-#define NSUPDATE_EXEC       "@NSUPDATE_EXECUTABLE@"
-#define NSLOOKUP_EXEC       "@NSLOOKUP_EXECUTABLE@"
-#define IPCP_UDP_RD_THR     @IPCP_UDP_RD_THR@
-#define IPCP_UDP_WR_THR     @IPCP_UDP_WR_THR@
-#define IPCP_UDP_MPL        @IPCP_UDP_MPL@
-#define IPCP_UDP4_MTU       @IPCP_UDP4_MTU@
-#define IPCP_UDP6_MTU       @IPCP_UDP6_MTU@
-
-/* eth */
-#cmakedefine HAVE_NETMAP
-#cmakedefine HAVE_BPF
-#cmakedefine HAVE_RAW_SOCKETS
-#cmakedefine IPCP_ETH_QDISC_BYPASS
-#define IPCP_ETH_RD_THR          @IPCP_ETH_RD_THR@
-#define IPCP_ETH_WR_THR          @IPCP_ETH_WR_THR@
-#define IPCP_ETH_LO_MTU          @IPCP_ETH_LO_MTU@
-#define IPCP_ETH_MGMT_FRAME_SIZE @IPCP_ETH_MGMT_FRAME_SIZE@
-#define IPCP_ETH_MPL             @IPCP_ETH_MPL@
-#define IPCP_ETH_SNDBUF          @IPCP_ETH_SNDBUF@
-#define IPCP_ETH_RCVBUF          @IPCP_ETH_RCVBUF@
 
 /* local */
 #define IPCP_LOCAL_MPL      @IPCP_LOCAL_MPL@

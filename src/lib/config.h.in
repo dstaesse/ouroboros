@@ -79,6 +79,25 @@
 #define PROC_RES_FDS        @PROC_RES_FDS@
 #define PROC_MAX_FQUEUES    @PROC_MAX_FQUEUES@
 
+/* Flow endpoints */
+#define POA_MGMT_FRAME_SIZE  @POA_MGMT_FRAME_SIZE@
+#define POA_MGMT_SND_TIMEO   @POA_MGMT_SND_TIMEO@
+#define POA_MAX_POAS         @POA_MAX_POAS@
+#define POA_UDP_MPL          @POA_UDP_MPL@
+#define POA_UDP4_MTU         @POA_UDP4_MTU@
+#define POA_UDP6_MTU         @POA_UDP6_MTU@
+#define POA_UDP_RD_BUF       @POA_UDP_RD_BUF@
+#cmakedefine                HAVE_ETH
+#cmakedefine                HAVE_RAW_SOCKETS
+#cmakedefine                HAVE_BPF
+#cmakedefine                HAVE_NETMAP
+#cmakedefine                POA_ETH_QDISC_BYPASS
+#define POA_ETH_MPL          @POA_ETH_MPL@
+#define POA_ETH_SNDBUF       @POA_ETH_SNDBUF@
+#define POA_ETH_RCVBUF       @POA_ETH_RCVBUF@
+#define POA_ETH_LO_MTU       @POA_ETH_LO_MTU@
+#define POA_ETH_RD_BUF       @POA_ETH_RD_BUF@
+
 /* Default Delta-t parameters */
 #cmakedefine                FRCT_LINUX_RTT_ESTIMATOR
 #define DELT_A              (@DELTA_T_ACK@)                  /* ms */

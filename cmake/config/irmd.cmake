@@ -11,7 +11,7 @@ set(ENROLL_TIMEOUT 20000 CACHE STRING
 set(REG_TIMEOUT 20000 CACHE STRING
   "Timeout for registering a name (ms)")
 set(QUERY_TIMEOUT 2000 CACHE STRING
-  "Timeout to query a name with an IPCP (ms); must exceed shim retry budget")
+  "Timeout to query a name with an IPCP (ms); must exceed PoA retries")
 set(CONNECT_TIMEOUT 20000 CACHE STRING
   "Timeout to connect an IPCP to another IPCP (ms)")
 set(FLOW_ALLOC_TIMEOUT 20000 CACHE STRING

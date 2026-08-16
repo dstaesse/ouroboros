@@ -441,6 +441,7 @@ int proc_exit__irm_req_ser(buffer_t *   buf)
         return -ENOMEM;
 }
 
+/* data is borrowed from the caller; detach before free. */
 int ipcp_flow_req_arr__irm_req_ser(buffer_t *               buf,
                                    const buffer_t *         dst,
                                    const struct flow_info * flow,
@@ -492,6 +493,138 @@ int ipcp_flow_req_arr__irm_req_ser(buffer_t *               buf,
         irm_msg__free_unpacked(msg, NULL);
  fail_malloc:
         return -ENOMEM;
+}
+
+static int __ep_flow_ser(buffer_t *               buf,
+                         const struct flow_info * flow,
+                         const buffer_t *         data,
+                         int                      response,
+                         const char *             dst,
+                         int                      code)
+{
+        irm_msg_t * msg;
+        size_t      len;
+        int         err = -ENOMEM;
+
+        msg = malloc(sizeof(*msg));
+        if (msg == NULL)
+                goto fail_malloc;
+
+        irm_msg__init(msg);
+
+        msg->code      = code;
+        msg->flow_info = flow_info_s_to_msg(flow);
+        if (msg->flow_info == NULL)
+                goto fail_msg;
+
+        if (dst != NULL) {
+                msg->dst = strdup(dst);
+                if (msg->dst == NULL)
+                        goto fail_msg;
+        }
+
+        if (data != NULL) {
+                msg->has_pk  = true;
+                msg->pk.len  = data->len;
+                msg->pk.data = data->data;
+        }
+
+        msg->has_response = true;
+        msg->response     = response;
+
+        len = irm_msg__get_packed_size(msg);
+        if (len == 0 || len > buf->len)
+                goto fail_msg;
+
+        buf->len = len;
+
+        irm_msg__pack(msg, buf->data);
+
+        err = 0;
+ fail_msg:
+        msg->pk.len  = 0;
+        msg->pk.data = NULL;
+
+        irm_msg__free_unpacked(msg, NULL);
+ fail_malloc:
+        return err;
+}
+
+int poa_flow_alloc__irm_req_ser(buffer_t *               buf,
+                                const struct flow_info * flow,
+                                const char *             dst)
+{
+        return __ep_flow_ser(buf, flow, NULL, 0, dst,
+                             IRM_MSG_CODE__IRM_POA_FLOW_ALLOC);
+}
+
+int poa_flow_alloc_r__irm_req_ser(buffer_t *               buf,
+                                  const struct flow_info * flow,
+                                  const buffer_t *         data,
+                                  int                      response)
+{
+        return __ep_flow_ser(buf, flow, data, response, NULL,
+                             IRM_MSG_CODE__IRM_POA_FLOW_ALLOC_R);
+}
+
+int ipcp_poa_flow_req_arr__irm_req_ser(buffer_t *               buf,
+                                       const struct flow_info * flow,
+                                       const buffer_t *         data)
+{
+        return __ep_flow_ser(buf, flow, data, 0, NULL,
+                             IRM_MSG_CODE__IPCP_POA_FLOW_REQ_ARR);
+}
+
+int poa_flow__irm_result_des(buffer_t *         buf,
+                             struct flow_info * flow,
+                             buffer_t *         data)
+{
+        irm_msg_t * msg;
+        int         err;
+
+        msg = irm_msg__unpack(NULL, buf->len, buf->data);
+        if (msg == NULL) {
+                err = -EIRMD;
+                goto fail_msg;
+        }
+
+        if (!msg->has_result) {
+                err = -EIRMD;
+                goto fail;
+        }
+
+        if (msg->result < 0) {
+                err = msg->result;
+                goto fail;
+        }
+
+        if (msg->flow_info == NULL) {
+                err = -EBADF;
+                goto fail;
+        }
+
+        *flow = flow_info_msg_to_s(msg->flow_info);
+
+        clrbuf(*data);
+
+        if (msg->has_pk && msg->pk.len > 0) {
+                data->data = malloc(msg->pk.len);
+                if (data->data == NULL) {
+                        err = -ENOMEM;
+                        goto fail;
+                }
+                memcpy(data->data, msg->pk.data, msg->pk.len);
+
+                data->len = msg->pk.len;
+        }
+
+        irm_msg__free_unpacked(msg, NULL);
+
+        return 0;
+ fail:
+        irm_msg__free_unpacked(msg, NULL);
+ fail_msg:
+        return err;
 }
 
 int ipcp_flow_update_arr__irm_req_ser(buffer_t *               buf,

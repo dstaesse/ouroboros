@@ -15,6 +15,10 @@ set(IRM_SOURCES
   irm/irm_ipcp_destroy.c
   irm/irm_ipcp_bootstrap.c
   irm/irm_ipcp_enroll.c
+  irm/irm_ipcp_poa.c
+  irm/irm_ipcp_poa_attach.c
+  irm/irm_ipcp_poa_detach.c
+  irm/irm_ipcp_poa_list.c
   irm/irm_ipcp_list.c
   irm/irm_ipcp_connect.c
   irm/irm_ipcp_disconnect.c

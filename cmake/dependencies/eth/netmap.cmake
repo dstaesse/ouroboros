@@ -1,18 +1,22 @@
-# netmap support (optional acceleration)
+# netmap support (kernel bypass). Explicit opt-in.
 find_path(NETMAP_C_INCLUDE_DIR
   net/netmap_user.h
   HINTS /usr/include /usr/local/include)
 
 mark_as_advanced(NETMAP_C_INCLUDE_DIR)
 
-if(NOT HAVE_RAW_SOCKETS AND NOT HAVE_BPF AND NETMAP_C_INCLUDE_DIR)
-  set(DISABLE_NETMAP FALSE CACHE BOOL
-    "Disable netmap support for ETH IPCPs")
-  if(NOT DISABLE_NETMAP)
-    message(STATUS "Netmap support for Ethernet IPCPs enabled")
-    set(HAVE_NETMAP TRUE)
-  else()
-    message(STATUS "Netmap support for Ethernet IPCPs disabled by user")
-    unset(HAVE_NETMAP)
+set(ENABLE_NETMAP FALSE CACHE BOOL
+  "Use netmap for Ethernet PoAs, overriding raw sockets or BPF")
+
+if(ENABLE_NETMAP)
+  if(NOT NETMAP_C_INCLUDE_DIR)
+    message(FATAL_ERROR "ENABLE_NETMAP is set, but netmap was not found.")
   endif()
+
+  message(STATUS "Netmap support for Ethernet PoAs enabled")
+
+  set(HAVE_NETMAP TRUE)
+
+  unset(HAVE_RAW_SOCKETS)
+  unset(HAVE_BPF)
 endif()

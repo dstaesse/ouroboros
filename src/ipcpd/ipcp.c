@@ -36,6 +36,7 @@
 #define OUROBOROS_PREFIX  "ipcpd/ipcp"
 #define IPCP_INFO         "info"
 #define ALLOC_TIMEOUT     50 /* ms */
+#define HAS_POA           (ipcpd.type != IPCP_LOCAL)
 
 #include <ouroboros/bitmap.h>
 #include <ouroboros/dev.h>
@@ -54,6 +55,7 @@
 #include "ipcp.h"
 #include "np1.h"
 
+#include <arpa/inet.h>
 #include <signal.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -69,14 +71,14 @@
 #define CLOCK_REALTIME_COARSE CLOCK_REALTIME
 #endif
 
+/* Fits "eth <dev> 0x<type>", the longest PoA rendering. */
+/* Matches src/tools/irm/irm_utils.h; keep in sync. */
+#define POA_STRLEN (DEV_NAME_SIZE + 11)
+
 static char * ipcp_type_str[] = {
         "local",
         "unicast",
-        "broadcast",
-        "eth-llc",
-        "eth-dix",
-        "udp4",
-        "udp6"
+        "broadcast"
 };
 
 static char * dir_hash_str[] = {
@@ -237,14 +239,6 @@ static int ipcp_rib_read(const char * path,
                         strcpy(buf, "unicast\n");
                 else if (ipcpd.type == IPCP_BROADCAST)
                         strcpy(buf, "broadcast\n");
-                else if (ipcpd.type == IPCP_ETH_LLC)
-                        strcpy(buf, "eth-llc\n");
-                else if (ipcpd.type == IPCP_ETH_DIX)
-                        strcpy(buf, "eth-dix\n");
-                else if (ipcpd.type == IPCP_UDP4)
-                        strcpy(buf, "udp4\n");
-                else if (ipcpd.type == IPCP_UDP6)
-                        strcpy(buf, "udp6\n");
                 else
                         strcpy(buf, "bug\n");
         }
@@ -316,8 +310,7 @@ static void * acceptloop(void * o)
 
         (void) o;
 
-        while (ipcp_get_state() != IPCP_SHUTDOWN &&
-               ipcp_get_state() != IPCP_INIT) {
+        while (ipcp_get_state() != IPCP_SHUTDOWN) {
                 struct cmd * cmd;
 
                 csockfd = accept(ipcpd.sockfd, 0, 0);
@@ -471,11 +464,6 @@ static void do_bootstrap(ipcp_config_msg_t * conf_msg,
 
         conf = ipcp_config_msg_to_s(conf_msg);
         switch(conf.type) { /* FIXED algorithms */
-        case IPCP_UDP4:
-                /* FALLTHRU */
-        case IPCP_UDP6:
-                conf.layer_info.dir_hash_algo = (enum pol_dir_hash) HASH_MD5;
-                break;
         case IPCP_BROADCAST:
                 conf.layer_info.dir_hash_algo = DIR_HASH_SHA3_256;
                 break;
@@ -493,6 +481,8 @@ static void do_bootstrap(ipcp_config_msg_t * conf_msg,
 
         strcpy(ipcpd.layer_name, info->name);
         ipcpd.dir_hash_algo = (enum hash_algo) info->dir_hash_algo;
+        if (poa_set_layer(info->name) < 0)
+                log_warn("Failed to set layer name for PoA queries.");
         ret_msg->layer_info = layer_info_s_to_msg(info);
         ipcp_set_state(IPCP_OPERATIONAL);
 
@@ -503,10 +493,13 @@ static void do_bootstrap(ipcp_config_msg_t * conf_msg,
                 ipcp_dir_hash_len());
 }
 
-static void do_enroll(const char * dst,
-                      ipcp_msg_t * ret_msg)
+static void do_enroll(const char *           dst,
+                      const poa_addr_msg_t * peer,
+                      ipcp_msg_t *           ret_msg)
 {
         struct layer_info info;
+        struct poa_addr    addr;
+        struct poa_addr *  pa = NULL;
 
         log_info("Enrolling with %s...", dst);
 
@@ -524,7 +517,16 @@ static void do_enroll(const char * dst,
                 return;
         }
 
-        ret_msg->result = ipcpd.ops->ipcp_enroll(dst, &info);
+        if (peer != NULL) {
+                addr = poa_addr_msg_to_s(peer);
+                if (addr.type == POA_INVALID || addr.type == POA_UDP) {
+                        ret_msg->result = -EINVAL;
+                        return;
+                }
+                pa   = &addr;
+        }
+
+        ret_msg->result = ipcpd.ops->ipcp_enroll(dst, pa, &info);
         if (ret_msg->result < 0) {
                 log_err("Failed to bootstrap IPCP.");
                 return;
@@ -532,6 +534,8 @@ static void do_enroll(const char * dst,
 
         strcpy(ipcpd.layer_name, info.name);
         ipcpd.dir_hash_algo = (enum hash_algo) info.dir_hash_algo;
+        if (poa_set_layer(info.name) < 0)
+                log_warn("Failed to set layer name for PoA queries.");
         ret_msg->layer_info = layer_info_s_to_msg(&info);
         ipcp_set_state(IPCP_OPERATIONAL);
 
@@ -542,11 +546,136 @@ static void do_enroll(const char * dst,
                 ipcp_dir_hash_len());
 }
 
-static void do_connect(const char * dst,
-                       const char * comp,
-                       qosspec_t    qs,
-                       ipcp_msg_t * ret_msg)
+/* Bounded so one oversized reply cannot be built; 64 is generous. */
+#define POA_LIST_MAX 64
+
+static void do_list_poas(ipcp_msg_t * ret_msg)
 {
+        struct poa_spec eps[POA_LIST_MAX];
+        ssize_t        n;
+        ssize_t        i;
+
+        if (ipcpd.type != IPCP_UNICAST && ipcpd.type != IPCP_BROADCAST) {
+                ret_msg->result = -ENOTSUP;
+                return;
+        }
+
+        n = poa_list(eps, POA_LIST_MAX);
+        if (n < 0) {
+                ret_msg->result = (int) n;
+                return;
+        }
+
+        if (n > POA_LIST_MAX) {
+                log_warn("Listing %d of %zd PoAs.", POA_LIST_MAX, n);
+
+                n = POA_LIST_MAX;
+        }
+
+        if (n == 0) {
+                ret_msg->result = 0;
+                return;
+        }
+
+        ret_msg->poas = malloc(n * sizeof(*ret_msg->poas));
+        if (ret_msg->poas == NULL) {
+                ret_msg->result = -ENOMEM;
+                return;
+        }
+
+        for (i = 0; i < n; i++) {
+                ret_msg->poas[i] = poa_spec_s_to_msg(&eps[i]);
+                if (ret_msg->poas[i] == NULL) {
+                        ret_msg->result = -ENOMEM;
+                        return;
+                }
+                ret_msg->n_poas++;
+        }
+
+        ret_msg->result = 0;
+}
+
+/* Names a PoA the way "irm ipcp poa list" prints it. */
+/* Matches src/tools/irm/irm_utils.c; keep in sync. */
+static void poa_spec_str(const struct poa_spec * poa,
+                         char *                  buf,
+                         size_t                  len)
+{
+        char addr[INET6_ADDRSTRLEN];
+
+        switch (poa->type) {
+        case POA_UDP4:
+                if (inet_ntop(AF_INET, &poa->udp4.ip_addr,
+                              addr, sizeof(addr)) == NULL)
+                        break;
+
+                snprintf(buf, len, "udp4 %s:%u", addr, poa->udp4.port);
+                return;
+        case POA_UDP6:
+                if (inet_ntop(AF_INET6, &poa->udp6.ip_addr,
+                              addr, sizeof(addr)) == NULL)
+                        break;
+
+                snprintf(buf, len, "udp6 [%s]:%u", addr, poa->udp6.port);
+                return;
+        case POA_ETH:
+                snprintf(buf, len, "eth %s 0x%04X", poa->eth.dev,
+                         poa->eth.ethertype);
+                return;
+        default:
+                break;
+        }
+
+        snprintf(buf, len, "(unknown)");
+}
+
+static void do_attach(poa_spec_msg_t * msg,
+                      ipcp_msg_t *     ret_msg)
+{
+        struct poa_spec poa;
+        char            str[POA_STRLEN + 1];
+
+        poa = poa_spec_msg_to_s(msg);
+
+        poa_spec_str(&poa, str, sizeof(str));
+
+        ret_msg->result = poa_attach(&poa);
+        if (ret_msg->result < 0) {
+                log_err("Failed to attach %s.", str);
+                return;
+        }
+
+        log_info("Attached %s.", str);
+}
+
+static void do_detach(poa_spec_msg_t * msg,
+                      ipcp_msg_t *     ret_msg)
+{
+        struct poa_spec poa;
+        char            str[POA_STRLEN + 1];
+
+        poa = poa_spec_msg_to_s(msg);
+
+        poa_spec_str(&poa, str, sizeof(str));
+
+        ret_msg->result = poa_detach(&poa);
+        if (ret_msg->result < 0) {
+                log_err("Failed to detach %s.", str);
+                return;
+        }
+
+        log_info("Detached %s.", str);
+}
+
+static void do_connect(const char *           dst,
+                       const char *           comp,
+                       qosspec_t              qs,
+                       const poa_addr_msg_t * peer,
+                       ipcp_msg_t *           ret_msg)
+{
+        struct poa_addr   addr;
+        struct poa_addr * pa = NULL;
+
         log_info("Connecting %s to %s...", comp, dst);
 
         if (ipcpd.ops->ipcp_connect == NULL) {
@@ -555,7 +684,16 @@ static void do_connect(const char * dst,
                 return;
         }
 
-        ret_msg->result = ipcpd.ops->ipcp_connect(dst, comp, qs);
+        if (peer != NULL) {
+                addr = poa_addr_msg_to_s(peer);
+                if (addr.type == POA_INVALID || addr.type == POA_UDP) {
+                        ret_msg->result = -EINVAL;
+                        return;
+                }
+                pa   = &addr;
+        }
+
+        ret_msg->result = ipcpd.ops->ipcp_connect(dst, comp, qs, pa);
 
         log_info("Finished connecting.");
 }
@@ -734,9 +872,14 @@ static void do_flow_join(pid_t           pid,
         log_info("Finished joining layer " HASH_FMT32 ".", HASH_VAL32(dst));
 }
 
+/*
+ * The IRMd says whether the flow is on a PoA, as it may not be known
+ * here yet. PoA flows answer without the IPCP type's flow machinery.
+ */
 static void do_flow_alloc_resp(int              resp,
                                int              flow_id,
                                uid_t            uid,
+                               bool             is_poa,
                                const buffer_t * data,
                                ipcp_msg_t *     ret_msg)
 {
@@ -745,13 +888,6 @@ static void do_flow_alloc_resp(int              resp,
 
         log_info("Responding %d to alloc on flow_id %d.", resp, flow_id);
 
-        if (ipcpd.ops->ipcp_flow_alloc_resp == NULL) {
-                log_err("Failed to respond on flow %d: operation unsupported.",
-                        flow_id);
-                ret_msg->result = -ENOTSUP;
-                return;
-        }
-
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
                 log_err("Failed to respond to flow %d:"
                         "IPCP in state <%s>, need <%s>.",
@@ -759,6 +895,20 @@ static void do_flow_alloc_resp(int              resp,
                         ipcp_state_str[ipcp_get_state()],
                         ipcp_state_str[IPCP_OPERATIONAL]);
                 ret_msg->result = -EIPCPSTATE;
+                return;
+        }
+
+        if (is_poa) {
+                ret_msg->result = poa_flow_alloc_resp(flow_id, resp, data);
+                log_info("Finished responding %d on PoA flow %d.",
+                         ret_msg->result, flow_id);
+                return;
+        }
+
+        if (ipcpd.ops->ipcp_flow_alloc_resp == NULL) {
+                log_err("Failed to respond on flow %d: operation unsupported.",
+                        flow_id);
+                ret_msg->result = -ENOTSUP;
                 return;
         }
 
@@ -788,23 +938,32 @@ static void do_flow_alloc_resp(int              resp,
 
 static void do_flow_dealloc(int          flow_id,
                             int          timeo_sec,
+                            bool         is_poa,
                             ipcp_msg_t * ret_msg)
 {
         int fd;
 
         log_info("Deallocating flow %d.", flow_id);
 
-        if (ipcpd.ops->ipcp_flow_dealloc == NULL) {
-                log_err("Failed to dealloc: operation unsupported.");
-                ret_msg->result = -ENOTSUP;
-                return;
-        }
-
         if (ipcp_get_state() != IPCP_OPERATIONAL) {
                 log_err("Failed to enroll: IPCP in state <%s>, need <%s>.",
                         ipcp_state_str[ipcp_get_state()],
                         ipcp_state_str[IPCP_OPERATIONAL]);
                 ret_msg->result = -EIPCPSTATE;
+                return;
+        }
+
+        if (is_poa) {
+                ret_msg->result = poa_flow_dealloc(flow_id);
+
+                log_info("Finished deallocating PoA flow %d.", flow_id);
+                return;
+        }
+
+        if (ipcpd.ops->ipcp_flow_dealloc == NULL) {
+                log_err("Failed to dealloc: operation unsupported.");
+
+                ret_msg->result = -ENOTSUP;
                 return;
         }
 
@@ -822,18 +981,25 @@ static void do_flow_dealloc(int          flow_id,
 
 static void do_flow_update(int              flow_id,
                            const buffer_t * data,
+                           bool             is_poa,
                            ipcp_msg_t *     ret_msg)
 {
         int fd;
 
-        if (ipcpd.ops->ipcp_flow_update == NULL) {
-                log_err("Failed to update flow: operation unsupported.");
-                ret_msg->result = -ENOTSUP;
+        if (ipcp_get_state() != IPCP_OPERATIONAL) {
+                ret_msg->result = -EIPCPSTATE;
                 return;
         }
 
-        if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                ret_msg->result = -EIPCPSTATE;
+        if (is_poa) {
+                ret_msg->result = poa_flow_update(flow_id, data);
+                return;
+        }
+
+        if (ipcpd.ops->ipcp_flow_update == NULL) {
+                log_err("Failed to update flow: operation unsupported.");
+
+                ret_msg->result = -ENOTSUP;
                 return;
         }
 
@@ -881,6 +1047,7 @@ static void * mainloop(void * o)
                 free(cmd);
 
                 if (msg == NULL) {
+                        log_err("Failed to unpack command message.");
                         close(sfd);
                         continue;
                 }
@@ -897,11 +1064,23 @@ static void * mainloop(void * o)
                         do_bootstrap(msg->conf, &ret_msg);
                         break;
                 case IPCP_MSG_CODE__IPCP_ENROLL:
-                        do_enroll(msg->dst, &ret_msg);
+                        do_enroll(msg->dst, msg->peer, &ret_msg);
+                        break;
+                case IPCP_MSG_CODE__IPCP_ATTACH:
+                        assert(HAS_POA);
+                        do_attach(msg->poa, &ret_msg);
+                        break;
+                case IPCP_MSG_CODE__IPCP_DETACH:
+                        assert(HAS_POA);
+                        do_detach(msg->poa, &ret_msg);
+                        break;
+                case IPCP_MSG_CODE__IPCP_LIST_POAS:
+                        do_list_poas(&ret_msg);
                         break;
                 case IPCP_MSG_CODE__IPCP_CONNECT:
                         qs = qos_spec_msg_to_s(msg->qosspec);
-                        do_connect(msg->dst, msg->comp, qs, &ret_msg);
+                        do_connect(msg->dst, msg->comp, qs, msg->peer,
+                                   &ret_msg);
                         break;
                 case IPCP_MSG_CODE__IPCP_DISCONNECT:
                         do_disconnect(msg->dst, msg->comp, &ret_msg);
@@ -940,17 +1119,20 @@ static void * mainloop(void * o)
                         data.len = msg->pk.len;
                         data.data = msg->pk.data;
                         do_flow_alloc_resp(msg->response, msg->flow_id,
-                                           msg->uid, &data, &ret_msg);
+                                           msg->uid, msg->is_poa,
+                                           &data, &ret_msg);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_DEALLOC:
-                        do_flow_dealloc(msg->flow_id, msg->timeo_sec, &ret_msg);
+                        do_flow_dealloc(msg->flow_id, msg->timeo_sec,
+                                        msg->is_poa, &ret_msg);
                         break;
                 case IPCP_MSG_CODE__IPCP_FLOW_UPDATE:
                         assert(msg->pk.len > 0 ? msg->pk.data != NULL
                                                : msg->pk.data == NULL);
                         data.len = msg->pk.len;
                         data.data = msg->pk.data;
-                        do_flow_update(msg->flow_id, &data, &ret_msg);
+                        do_flow_update(msg->flow_id, &data, msg->is_poa,
+                                       &ret_msg);
                         break;
                 default:
                         ret_msg.result = -1;
@@ -988,7 +1170,7 @@ static void * mainloop(void * o)
                 if (write(sfd, buffer.data, buffer.len) == -1)
                         log_warn("Failed to send reply message");
 
-                pthread_cleanup_pop(true); /* close sfd */
+                pthread_cleanup_pop(true); /* close sfd        */
                 pthread_cleanup_pop(true); /* free buffer.data */
 
                 tpm_end_work(ipcpd.tpm);
@@ -1101,6 +1283,11 @@ int ipcp_init(int               argc,
                 goto fail_rib_reg;
         }
 
+        if (poa_init(ipcpd.name) < 0) {
+                log_err("Failed to initialize PoAs.");
+                goto fail_poa_init;
+        }
+
         list_head_init(&ipcpd.cmds);
 
         ipcpd.tpm = tpm_create(IPCP_MIN_THREADS, IPCP_ADD_THREADS,
@@ -1124,6 +1311,8 @@ int ipcp_init(int               argc,
         return 0;
 
  fail_tpm_create:
+        poa_fini();
+ fail_poa_init:
         rib_unreg(IPCP_INFO);
  fail_rib_reg:
         rib_fini();
@@ -1149,6 +1338,7 @@ int ipcp_init(int               argc,
         return -1;
 }
 
+/* Enrolment runs over a PoA, so poa_start() precedes any RPC. */
 int ipcp_start(void)
 {
         sigset_t         sigset;
@@ -1168,6 +1358,11 @@ int ipcp_start(void)
         info.state = IPCP_BOOT;
 
         ipcp_set_state(IPCP_BOOT);
+
+        if (poa_start() < 0) {
+                log_err("Failed to start PoAs.");
+                goto fail_poa_start;
+        }
 
         if (tpm_start(ipcpd.tpm)) {
                 log_err("Failed to start threadpool manager.");
@@ -1192,6 +1387,8 @@ int ipcp_start(void)
  fail_acceptor:
         tpm_stop(ipcpd.tpm);
  fail_tpm_start:
+        poa_stop();
+ fail_poa_start:
         tpm_destroy(ipcpd.tpm);
         ipcp_set_state(IPCP_INIT);
         ipcp_create_r(&info);
@@ -1263,6 +1460,8 @@ void ipcp_stop(void)
 
         tpm_stop(ipcpd.tpm);
 
+        poa_stop();
+
         ipcp_set_state(IPCP_INIT);
 }
 
@@ -1270,6 +1469,8 @@ void ipcp_fini(void)
 {
 
         tpm_destroy(ipcpd.tpm);
+
+        poa_fini();
 
         rib_unreg(IPCP_INFO);
 

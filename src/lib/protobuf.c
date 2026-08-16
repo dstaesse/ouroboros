@@ -22,6 +22,7 @@
 
 #define _DEFAULT_SOURCE
 
+#include <ouroboros/errno.h>
 #include <ouroboros/protobuf.h>
 #include <ouroboros/crypt.h>
 #include <ouroboros/proc.h>
@@ -215,6 +216,166 @@ struct layer_info layer_info_msg_to_s(const layer_info_msg_t * msg)
         return s;
 }
 
+
+static bool mac_is_zero(const uint8_t * mac)
+{
+        static const uint8_t zero[POA_MAC_SIZE] = { 0 };
+
+        return memcmp(mac, zero, POA_MAC_SIZE) == 0;
+}
+
+poa_addr_msg_t * poa_addr_s_to_msg(const struct poa_addr * s)
+{
+        poa_addr_msg_t * msg;
+
+        assert(s != NULL);
+
+        msg = malloc(sizeof(*msg));
+        if (msg == NULL)
+                goto fail_malloc;
+
+        poa_addr_msg__init(msg);
+
+        msg->type = s->type;
+
+        if (s->hostname[0] != '\0') {
+                msg->hostname = strdup(s->hostname);
+                if (msg->hostname == NULL)
+                        goto fail_msg;
+        }
+
+        switch (s->type) {
+        case POA_UDP4:
+                msg->has_ip4  = true;
+                msg->ip4      = s->udp4.ip_addr.s_addr;
+                msg->has_port = true;
+                msg->port     = s->udp4.port;
+                break;
+        case POA_UDP6:
+                msg->has_ip6  = true;
+                msg->ip6.len  = sizeof(s->udp6.ip_addr);
+                msg->ip6.data = malloc(msg->ip6.len);
+                if (msg->ip6.data == NULL)
+                        goto fail_msg;
+                memcpy(msg->ip6.data, &s->udp6.ip_addr, msg->ip6.len);
+
+                msg->has_port = true;
+                msg->port     = s->udp6.port;
+                break;
+        case POA_ETH:
+                msg->has_ethertype = true;
+                msg->ethertype     = s->eth.dst.ethertype;
+                msg->has_mac  = true;
+                msg->mac.len  = POA_MAC_SIZE;
+                msg->mac.data = malloc(POA_MAC_SIZE);
+                if (msg->mac.data == NULL)
+                        goto fail_msg;
+                memcpy(msg->mac.data, s->eth.dst.mac, POA_MAC_SIZE);
+
+                if (!mac_is_zero(s->eth.src.mac)) {
+                        msg->has_src_mac  = true;
+                        msg->src_mac.len  = POA_MAC_SIZE;
+                        msg->src_mac.data = malloc(POA_MAC_SIZE);
+                        if (msg->src_mac.data == NULL)
+                                goto fail_msg;
+                        memcpy(msg->src_mac.data, s->eth.src.mac, POA_MAC_SIZE);
+                }
+
+                if (s->eth.src.dev[0] != '\0') {
+                        msg->dev = strdup(s->eth.src.dev);
+                        if (msg->dev == NULL)
+                                goto fail_msg;
+                }
+                break;
+        case POA_UDP:
+                msg->has_port = true;
+                msg->port     = s->udp4.port;
+                break;
+        default:
+                goto fail_msg;
+        }
+
+        return msg;
+
+ fail_msg:
+        poa_addr_msg__free_unpacked(msg, NULL);
+ fail_malloc:
+        return NULL;
+}
+
+struct poa_addr poa_addr_msg_to_s(const poa_addr_msg_t * msg)
+{
+        struct poa_addr s;
+
+        assert(msg != NULL);
+
+        memset(&s, 0, sizeof(s));
+
+        s.type = POA_INVALID;
+
+        if (msg->hostname != NULL) {
+                if (strlen(msg->hostname) > POA_HOST_STRLEN)
+                        return s;
+                strcpy(s.hostname, msg->hostname);
+        }
+
+        switch (msg->type) {
+        case POA_UDP4:
+                if (!msg->has_ip4 || !msg->has_port)
+                        return s;
+
+                s.udp4.ip_addr.s_addr = msg->ip4;
+                s.udp4.port      = msg->port;
+                break;
+        case POA_UDP6:
+                if (!msg->has_ip6 || !msg->has_port)
+                        return s;
+
+                if (msg->ip6.len != sizeof(s.udp6.ip_addr)
+                    || msg->ip6.data == NULL)
+                        return s;
+
+                memcpy(&s.udp6.ip_addr, msg->ip6.data, msg->ip6.len);
+
+                s.udp6.port = msg->port;
+                break;
+        case POA_ETH:
+                if (!msg->has_ethertype)
+                        return s;
+
+                s.eth.src.ethertype = msg->ethertype;
+                s.eth.dst.ethertype = msg->ethertype;
+
+                if (msg->mac.len != POA_MAC_SIZE || msg->mac.data == NULL)
+                        return s;
+
+                memcpy(s.eth.dst.mac, msg->mac.data, POA_MAC_SIZE);
+
+                if (msg->src_mac.len == POA_MAC_SIZE)
+                        memcpy(s.eth.src.mac, msg->src_mac.data, POA_MAC_SIZE);
+
+                if (msg->dev != NULL) {
+                        if (strlen(msg->dev) > DEV_NAME_SIZE)
+                                return s;
+                        strcpy(s.eth.src.dev, msg->dev);
+                }
+                break;
+        case POA_UDP:
+                if (msg->hostname == NULL || msg->hostname[0] == '\0'
+                    || !msg->has_port)
+                        return s;
+
+                s.udp4.port = msg->port;
+                break;
+        default:
+                return s;
+        }
+
+        s.type = msg->type;
+
+        return s;
+}
+
 ipcp_info_msg_t * ipcp_info_s_to_msg(const struct ipcp_info * s)
 {
         ipcp_info_msg_t * msg;
@@ -389,22 +550,6 @@ struct dt_config dt_config_msg_to_s(const dt_config_msg_t * msg)
         return s;
 }
 
-struct dir_dht_config dir_dht_config_msg_to_s(const dir_dht_config_msg_t * msg)
-{
-        struct dir_dht_config s;
-
-        assert(msg != NULL);
-
-        s.params.alpha       = msg->alpha;
-        s.params.k           = msg->k;
-        s.params.t_expire    = msg->t_expire;
-        s.params.t_refresh   = msg->t_refresh;
-        s.params.t_replicate = msg->t_replicate;
-        s.peer               = msg->peer;
-
-        return s;
-}
-
 dir_dht_config_msg_t * dir_dht_config_s_to_msg(const struct dir_dht_config * s)
 {
         dir_dht_config_msg_t * msg;
@@ -427,22 +572,18 @@ dir_dht_config_msg_t * dir_dht_config_s_to_msg(const struct dir_dht_config * s)
         return msg;
 }
 
-struct dir_config dir_config_msg_to_s(const dir_config_msg_t * msg)
+struct dir_dht_config dir_dht_config_msg_to_s(const dir_dht_config_msg_t * msg)
 {
-        struct dir_config s;
+        struct dir_dht_config s;
 
         assert(msg != NULL);
 
-        switch (msg->pol) {
-        case DIR_DHT:
-                s.dht = dir_dht_config_msg_to_s(msg->dht);
-                break;
-        default:
-                /* No checks here */
-                break;
-        }
-
-        s.pol = msg->pol;
+        s.params.alpha       = msg->alpha;
+        s.params.k           = msg->k;
+        s.params.t_expire    = msg->t_expire;
+        s.params.t_refresh   = msg->t_refresh;
+        s.params.t_replicate = msg->t_replicate;
+        s.peer               = msg->peer;
 
         return s;
 }
@@ -479,6 +620,25 @@ dir_config_msg_t * dir_config_s_to_msg(const struct dir_config * s)
         return NULL;
 }
 
+struct dir_config dir_config_msg_to_s(const dir_config_msg_t * msg)
+{
+        struct dir_config s;
+
+        assert(msg != NULL);
+
+        switch (msg->pol) {
+        case DIR_DHT:
+                s.dht = dir_dht_config_msg_to_s(msg->dht);
+                break;
+        default:
+                /* No checks here */
+                break;
+        }
+
+        s.pol = msg->pol;
+
+        return s;
+}
 
 uni_config_msg_t * uni_config_s_to_msg(const struct uni_config * s)
 {
@@ -525,9 +685,9 @@ struct uni_config uni_config_msg_to_s(const uni_config_msg_t * msg)
         return s;
 }
 
-udp4_config_msg_t * udp4_config_s_to_msg(const struct udp4_config * s)
+udp4_poa_msg_t * udp4_poa_s_to_msg(const struct udp4_poa * s)
 {
-        udp4_config_msg_t * msg;
+        udp4_poa_msg_t * msg;
 
         assert(s != NULL);
 
@@ -535,32 +695,30 @@ udp4_config_msg_t * udp4_config_s_to_msg(const struct udp4_config * s)
         if (msg == NULL)
                 return NULL;
 
-        udp4_config_msg__init(msg);
+        udp4_poa_msg__init(msg);
 
-        msg->ip_addr  = s->ip_addr.s_addr;
-        msg->dns_addr = s->dns_addr.s_addr;
-        msg->port     = s->port;
+        msg->ip_addr = s->ip_addr.s_addr;
+        msg->port    = s->port;
 
         return msg;
 }
 
-struct udp4_config udp4_config_msg_to_s(const udp4_config_msg_t * msg)
+struct udp4_poa udp4_poa_msg_to_s(const udp4_poa_msg_t * msg)
 {
-        struct udp4_config s;
+        struct udp4_poa s;
 
         assert(msg != NULL);
 
-        s.ip_addr.s_addr  = msg->ip_addr;
-        s.dns_addr.s_addr = msg->dns_addr;
-        s.port            = msg->port;
+        s.ip_addr.s_addr = msg->ip_addr;
+        s.port           = msg->port;
 
         return s;
 }
 
 #define IN6_LEN (size_t) sizeof(struct in6_addr)
-udp6_config_msg_t * udp6_config_s_to_msg(const struct udp6_config * s)
+udp6_poa_msg_t * udp6_poa_s_to_msg(const struct udp6_poa * s)
 {
-        udp6_config_msg_t * msg;
+        udp6_poa_msg_t * msg;
 
         assert(s != NULL);
 
@@ -568,7 +726,7 @@ udp6_config_msg_t * udp6_config_s_to_msg(const struct udp6_config * s)
         if (msg == NULL)
                 goto fail_malloc;
 
-        udp6_config_msg__init(msg);
+        udp6_poa_msg__init(msg);
 
         msg->ip_addr.data = malloc(IN6_LEN);
         if (msg->ip_addr.data == NULL)
@@ -577,42 +735,33 @@ udp6_config_msg_t * udp6_config_s_to_msg(const struct udp6_config * s)
         msg->ip_addr.len = IN6_LEN;
         memcpy(msg->ip_addr.data, &s->ip_addr.s6_addr, IN6_LEN);
 
-        msg->dns_addr.data = malloc(IN6_LEN);
-        if (msg->dns_addr.data == NULL)
-                goto fail_msg;
-
-        msg->dns_addr.len = IN6_LEN;
-        memcpy(msg->dns_addr.data, &s->dns_addr.s6_addr, IN6_LEN);
-
         msg->port = s->port;
 
         return msg;
 
  fail_msg:
-        udp6_config_msg__free_unpacked(msg, NULL);
+        udp6_poa_msg__free_unpacked(msg, NULL);
  fail_malloc:
         return NULL;
 }
 
-struct udp6_config udp6_config_msg_to_s(const udp6_config_msg_t * msg)
+struct udp6_poa udp6_poa_msg_to_s(const udp6_poa_msg_t * msg)
 {
-        struct udp6_config s;
+        struct udp6_poa s;
 
         assert(msg != NULL);
 
         assert(msg->ip_addr.len == IN6_LEN);
-        assert(msg->dns_addr.len == IN6_LEN);
 
         memcpy(&s.ip_addr.s6_addr, msg->ip_addr.data, IN6_LEN);
-        memcpy(&s.dns_addr.s6_addr, msg->dns_addr.data, IN6_LEN);
         s.port = msg->port;
 
         return s;
 }
 
-eth_config_msg_t * eth_config_s_to_msg(const struct eth_config * s)
+eth_poa_msg_t * eth_poa_s_to_msg(const struct eth_poa * s)
 {
-        eth_config_msg_t * msg;
+        eth_poa_msg_t * msg;
 
         assert(s != NULL);
 
@@ -620,7 +769,7 @@ eth_config_msg_t * eth_config_s_to_msg(const struct eth_config * s)
         if (msg == NULL)
                 goto fail_malloc;
 
-        eth_config_msg__init(msg);
+        eth_poa_msg__init(msg);
 
         msg->dev = strdup(s->dev);
         if (msg->dev == NULL)
@@ -628,27 +777,114 @@ eth_config_msg_t * eth_config_s_to_msg(const struct eth_config * s)
 
         msg->ethertype = s->ethertype;
 
+        msg->has_mac = true;
+        msg->mac.len = POA_MAC_SIZE;
+        msg->mac.data = malloc(POA_MAC_SIZE);
+        if (msg->mac.data == NULL)
+                goto fail_msg;
+
+        memcpy(msg->mac.data, s->mac, POA_MAC_SIZE);
+
         return msg;
 
  fail_msg:
-        eth_config_msg__free_unpacked(msg, NULL);
+        eth_poa_msg__free_unpacked(msg, NULL);
  fail_malloc:
         return NULL;
 }
 
-struct eth_config eth_config_msg_to_s(const eth_config_msg_t * msg)
+struct eth_poa eth_poa_msg_to_s(const eth_poa_msg_t * msg)
 {
-        struct eth_config s;
+        struct eth_poa s;
 
         assert(msg != NULL);
         assert(strlen(msg->dev) <= DEV_NAME_SIZE);
 
+        memset(&s, 0, sizeof(s));
+
         strcpy(s.dev, msg->dev);
+
         s.ethertype = msg->ethertype;
+
+        if (msg->mac.len == POA_MAC_SIZE)
+                memcpy(s.mac, msg->mac.data, POA_MAC_SIZE);
 
         return s;
 }
 
+
+poa_spec_msg_t * poa_spec_s_to_msg(const struct poa_spec * s)
+{
+        poa_spec_msg_t * msg;
+
+        assert(s != NULL);
+
+        msg = malloc(sizeof(*msg));
+        if (msg == NULL)
+                goto fail_malloc;
+
+        poa_spec_msg__init(msg);
+
+        switch (s->type) {
+        case POA_UDP4:
+                msg->udp4 = udp4_poa_s_to_msg(&s->udp4);
+                if (msg->udp4 == NULL)
+                        goto fail_msg;
+                break;
+        case POA_UDP6:
+                msg->udp6 = udp6_poa_s_to_msg(&s->udp6);
+                if (msg->udp6 == NULL)
+                        goto fail_msg;
+                break;
+        case POA_ETH:
+                msg->eth = eth_poa_s_to_msg(&s->eth);
+                if (msg->eth == NULL)
+                        goto fail_msg;
+                break;
+        default:
+                goto fail_msg;
+        }
+
+        return msg;
+
+ fail_msg:
+        poa_spec_msg__free_unpacked(msg, NULL);
+ fail_malloc:
+        return NULL;
+}
+
+struct poa_spec poa_spec_msg_to_s(const poa_spec_msg_t * msg)
+{
+        struct poa_spec s;
+
+        memset(&s, 0, sizeof(s));
+
+        s.type = POA_INVALID;
+
+        if (msg == NULL)
+                return s;
+
+        if (msg->udp4 != NULL) {
+                s.type = POA_UDP4;
+                s.udp4 = udp4_poa_msg_to_s(msg->udp4);
+        } else if (msg->udp6 != NULL) {
+                if (msg->udp6->ip_addr.len != IN6_LEN
+                    || msg->udp6->ip_addr.data == NULL)
+                        return s;
+
+                s.type = POA_UDP6;
+                s.udp6 = udp6_poa_msg_to_s(msg->udp6);
+        } else if (msg->eth != NULL) {
+                if (msg->eth->dev == NULL
+                    || strlen(msg->eth->dev) > DEV_NAME_SIZE)
+                        return s;
+
+                s.type = POA_ETH;
+                s.eth  = eth_poa_msg_to_s(msg->eth);
+        }
+
+        return s;
+}
 
 ipcp_config_msg_t * ipcp_config_s_to_msg(const struct ipcp_config * s)
 {
@@ -671,23 +907,6 @@ ipcp_config_msg_t * ipcp_config_s_to_msg(const struct ipcp_config * s)
                         goto fail_msg;
                 break;
         case IPCP_BROADCAST:
-                break;
-        case IPCP_ETH_LLC:
-                /* FALLTHRU */
-        case IPCP_ETH_DIX:
-                msg->eth = eth_config_s_to_msg(&s->eth);
-                if (msg->eth == NULL)
-                        goto fail_msg;
-                break;
-        case IPCP_UDP4:
-                msg->udp4 = udp4_config_s_to_msg(&s->udp4);
-                if (msg->udp4 == NULL)
-                        goto fail_msg;
-                break;
-        case IPCP_UDP6:
-                msg->udp6 = udp6_config_s_to_msg(&s->udp6);
-                if (msg->udp6 == NULL)
-                        goto fail_msg;
                 break;
         default:
                 /* No checks here */
@@ -714,6 +933,8 @@ struct ipcp_config ipcp_config_msg_to_s(const ipcp_config_msg_t * msg)
 
         assert(msg != NULL);
 
+        memset(&s, 0, sizeof(s));
+
         s.type = msg->ipcp_type;
 
         s.layer_info = layer_info_msg_to_s(msg->layer_info);
@@ -723,17 +944,6 @@ struct ipcp_config ipcp_config_msg_to_s(const ipcp_config_msg_t * msg)
                 break;
         case IPCP_UNICAST:
                 s.unicast = uni_config_msg_to_s(msg->unicast);
-                break;
-        case IPCP_ETH_LLC:
-                /* FALLTHRU */
-        case IPCP_ETH_DIX:
-                s.eth = eth_config_msg_to_s(msg->eth);
-                break;
-        case IPCP_UDP4:
-                s.udp4 = udp4_config_msg_to_s(msg->udp4);
-                break;
-        case IPCP_UDP6:
-                s.udp6 = udp6_config_msg_to_s(msg->udp6);
                 break;
         case IPCP_BROADCAST:
                 break;

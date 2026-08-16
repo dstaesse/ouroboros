@@ -52,6 +52,23 @@ int ipcp_flow_req_arr__irm_req_ser(buffer_t *               buf,
                                    const struct flow_info * flow,
                                    const buffer_t *         data);
 
+int poa_flow_alloc__irm_req_ser(buffer_t *               buf,
+                                const struct flow_info * flow,
+                                const char *             dst);
+
+int poa_flow_alloc_r__irm_req_ser(buffer_t *               buf,
+                                  const struct flow_info * flow,
+                                  const buffer_t *         data,
+                                  int                      response);
+
+int ipcp_poa_flow_req_arr__irm_req_ser(buffer_t *               buf,
+                                       const struct flow_info * flow,
+                                       const buffer_t *         data);
+
+int poa_flow__irm_result_des(buffer_t *         buf,
+                             struct flow_info * flow,
+                             buffer_t *         data);
+
 int ipcp_flow_update_arr__irm_req_ser(buffer_t *               buf,
                                       const struct flow_info * flow,
                                       const buffer_t *         data);

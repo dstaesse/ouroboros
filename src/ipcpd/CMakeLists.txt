@@ -4,7 +4,6 @@
 # Common sources shared by all IPCPs (absolute paths for subdirectories)
 set(IPCP_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/ipcp.c
-  ${CMAKE_CURRENT_SOURCE_DIR}/shim-data.c
 )
 
 set(COMMON_SOURCES
@@ -24,7 +23,3 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/config.h.in"
 add_subdirectory(local)
 add_subdirectory(broadcast)
 add_subdirectory(unicast)
-if(HAVE_ETH)
-  add_subdirectory(eth)
-endif()
-add_subdirectory(udp)

@@ -24,9 +24,9 @@
 #define OUROBOROS_LIB_PROTOBUF_H
 
 #include <ouroboros/flow.h>
-#include <ouroboros/qos.h>
 #include <ouroboros/ipcp.h>
 #include <ouroboros/irm.h>
+#include <ouroboros/qos.h>
 #include <ouroboros/serdes-irm.h>
 #include <ouroboros/serdes-oep.h>
 
@@ -37,9 +37,10 @@ typedef RoutingConfigMsg routing_config_msg_t;
 typedef DtConfigMsg      dt_config_msg_t;
 typedef DirConfigMsg     dir_config_msg_t;
 typedef DirDhtConfigMsg  dir_dht_config_msg_t;
-typedef EthConfigMsg     eth_config_msg_t;
-typedef Udp4ConfigMsg    udp4_config_msg_t;
-typedef Udp6ConfigMsg    udp6_config_msg_t;
+typedef EthPoaMsg     eth_poa_msg_t;
+typedef Udp4PoaMsg    udp4_poa_msg_t;
+typedef PoaSpecMsg        poa_spec_msg_t;
+typedef Udp6PoaMsg    udp6_poa_msg_t;
 typedef UniConfigMsg     uni_config_msg_t;
 
 #include "ipcp.pb-c.h"
@@ -56,6 +57,7 @@ typedef FlowInfoMsg      flow_info_msg_t;
 typedef NameInfoMsg      name_info_msg_t;
 typedef LayerInfoMsg     layer_info_msg_t;
 typedef QosspecMsg       qosspec_msg_t;
+typedef PoaAddrMsg        poa_addr_msg_t;
 
 #include "enroll.pb-c.h"
 typedef EnrollReqMsg     enroll_req_msg_t;
@@ -79,6 +81,10 @@ layer_info_msg_t *  layer_info_s_to_msg(const struct layer_info * s);
 
 struct layer_info   layer_info_msg_to_s(const layer_info_msg_t * msg);
 
+poa_addr_msg_t *    poa_addr_s_to_msg(const struct poa_addr * s);
+
+struct poa_addr     poa_addr_msg_to_s(const poa_addr_msg_t * msg);
+
 ipcp_info_msg_t *   ipcp_info_s_to_msg(const struct ipcp_info * s);
 
 struct ipcp_info    ipcp_info_msg_to_s(const ipcp_info_msg_t * msg);
@@ -91,19 +97,23 @@ uni_config_msg_t *  uni_config_s_to_msg(const struct uni_config * s);
 
 struct uni_config   uni_config_msg_to_s(const uni_config_msg_t * msg);
 
-eth_config_msg_t *  eth_config_s_to_msg(const struct eth_config * s);
+eth_poa_msg_t *     eth_poa_s_to_msg(const struct eth_poa * s);
 
-struct eth_config   eth_config_msg_to_s(const eth_config_msg_t * msg);
+struct eth_poa      eth_poa_msg_to_s(const eth_poa_msg_t * msg);
 
-udp4_config_msg_t * udp4_config_s_to_msg(const struct udp4_config * s);
+udp4_poa_msg_t *    udp4_poa_s_to_msg(const struct udp4_poa * s);
 
-struct udp4_config  udp4_config_msg_to_s(const udp4_config_msg_t * msg);
+struct udp4_poa     udp4_poa_msg_to_s(const udp4_poa_msg_t * msg);
 
-udp6_config_msg_t * udp6_config_s_to_msg(const struct udp6_config * s);
+udp6_poa_msg_t *    udp6_poa_s_to_msg(const struct udp6_poa * s);
 
-struct udp6_config  udp6_config_msg_to_s(const udp6_config_msg_t * msg);
+struct udp6_poa     udp6_poa_msg_to_s(const udp6_poa_msg_t * msg);
 
 ipcp_config_msg_t * ipcp_config_s_to_msg(const struct ipcp_config * s);
+
+poa_spec_msg_t *    poa_spec_s_to_msg(const struct poa_spec * s);
+
+struct poa_spec     poa_spec_msg_to_s(const poa_spec_msg_t * msg);
 
 struct ipcp_config  ipcp_config_msg_to_s(const ipcp_config_msg_t * msg);
 

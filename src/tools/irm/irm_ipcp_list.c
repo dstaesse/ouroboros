@@ -48,10 +48,6 @@
 
 #define UNICAST   "unicast"
 #define BROADCAST "broadcast"
-#define UDP4      "udp4"
-#define UDP6      "udp6"
-#define ETH_LLC   "eth-llc"
-#define ETH_DIX   "eth-dix"
 #define LOCAL     "local"
 
 static void usage(void)
@@ -60,8 +56,7 @@ static void usage(void)
                "                [name  <ipcp name>]\n"
                "                [layer <layer_name>]\n\n"
                "                [type [TYPE]]\n\n"
-               "where TYPE = {" UNICAST " " LOCAL " "
-               UDP4 " " UDP6 " " ETH_LLC " " ETH_DIX "}\n");
+               "where TYPE = {" UNICAST " " BROADCAST " " LOCAL "}\n");
 }
 
 static char * str_type(enum ipcp_type type)
@@ -71,14 +66,6 @@ static char * str_type(enum ipcp_type type)
                 return UNICAST;
         case IPCP_BROADCAST:
                 return BROADCAST;
-        case IPCP_ETH_LLC:
-                return ETH_LLC;
-        case IPCP_ETH_DIX:
-                return ETH_DIX;
-        case IPCP_UDP4:
-                return UDP4;
-        case IPCP_UDP6:
-                return UDP6;
         case IPCP_LOCAL:
                 return LOCAL;
         default:
@@ -116,16 +103,8 @@ int do_list_ipcp(int     argc,
                         type = IPCP_UNICAST;
                 else if (strcmp(ipcp_type, BROADCAST) == 0)
                         type = IPCP_BROADCAST;
-                else if (strcmp(ipcp_type, UDP4) == 0)
-                        type = IPCP_UDP4;
-                else if (strcmp(ipcp_type, UDP6) == 0)
-                        type = IPCP_UDP6;
                 else if (strcmp(ipcp_type, LOCAL) == 0)
                         type = IPCP_LOCAL;
-                else if (strcmp(ipcp_type, ETH_LLC) == 0)
-                        type = IPCP_ETH_LLC;
-                else if (strcmp(ipcp_type, ETH_DIX) == 0)
-                        type = IPCP_ETH_DIX;
                 else {
                         usage();
                         return -1;

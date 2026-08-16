@@ -34,6 +34,7 @@
 #include <ouroboros/utils.h>
 
 #include "ipcp.h"
+#include "reg/reg.h"
 
 #include <fcntl.h>
 #include <pthread.h>
@@ -72,6 +73,10 @@ static char * str_ipcp_cmd(int code)
                 return "alloc_resp";
         case IPCP_MSG_CODE__IPCP_FLOW_DEALLOC:
                 return "dealloc";
+        case IPCP_MSG_CODE__IPCP_FLOW_UPDATE:
+                return "flow_update";
+        case IPCP_MSG_CODE__IPCP_REPLY:
+                return "reply";
         default:
                 assert(false);
                 return "unknown";
@@ -196,7 +201,9 @@ int ipcp_bootstrap(pid_t                pid,
         msg.conf = ipcp_config_s_to_msg(conf);
 
         recv_msg = send_recv_ipcp_msg(pid, &msg);
+
         ipcp_config_msg__free_unpacked(msg.conf, NULL);
+
         if (recv_msg == NULL)
                 return -EIPCP;
 
@@ -225,9 +232,88 @@ int ipcp_bootstrap(pid_t                pid,
         return ret;
 }
 
-int ipcp_enroll(pid_t               pid,
-                const char *        dst,
-                struct layer_info * info)
+ssize_t ipcp_list_poas(pid_t              pid,
+                       struct poa_spec ** eps)
+{
+        ipcp_msg_t   msg = IPCP_MSG__INIT;
+        ipcp_msg_t * recv_msg;
+        size_t       nr;
+        size_t       i;
+
+        if (eps == NULL)
+                return -EINVAL;
+
+        *eps = NULL;
+
+        msg.code = IPCP_MSG_CODE__IPCP_LIST_POAS;
+
+        recv_msg = send_recv_ipcp_msg(pid, &msg);
+        if (recv_msg == NULL)
+                return -EIPCP;
+
+        nr = recv_msg->n_poas;
+        if (nr == 0) {
+                ipcp_msg__free_unpacked(recv_msg, NULL);
+                return 0;
+        }
+
+        *eps = malloc(nr * sizeof(**eps));
+        if (*eps == NULL) {
+                ipcp_msg__free_unpacked(recv_msg, NULL);
+                return -ENOMEM;
+        }
+
+        for (i = 0; i < nr; i++)
+                (*eps)[i] = poa_spec_msg_to_s(recv_msg->poas[i]);
+
+        ipcp_msg__free_unpacked(recv_msg, NULL);
+
+        return (ssize_t) nr;
+}
+
+int ipcp_attach(pid_t                   pid,
+                const struct poa_spec * poa,
+                bool                    attach)
+{
+        ipcp_msg_t   msg = IPCP_MSG__INIT;
+        ipcp_msg_t * recv_msg;
+        int          ret;
+
+        if (poa == NULL)
+                return -EINVAL;
+
+        if (attach)
+                msg.code = IPCP_MSG_CODE__IPCP_ATTACH;
+        else
+                msg.code = IPCP_MSG_CODE__IPCP_DETACH;
+
+        msg.poa = poa_spec_s_to_msg(poa);
+        if (msg.poa == NULL)
+                return -EINVAL;
+
+        recv_msg = send_recv_ipcp_msg(pid, &msg);
+
+        poa_spec_msg__free_unpacked(msg.poa, NULL);
+
+        if (recv_msg == NULL)
+                return -EIPCP;
+
+        if (!recv_msg->has_result) {
+                ipcp_msg__free_unpacked(recv_msg, NULL);
+                return -EIPCP;
+        }
+
+        ret = recv_msg->result;
+
+        ipcp_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
+}
+
+int ipcp_enroll(pid_t                   pid,
+                const char *            dst,
+                const struct poa_addr * addr,
+                struct layer_info *     info)
 {
         ipcp_msg_t   msg = IPCP_MSG__INIT;
         ipcp_msg_t * recv_msg;
@@ -239,7 +325,16 @@ int ipcp_enroll(pid_t               pid,
         msg.code = IPCP_MSG_CODE__IPCP_ENROLL;
         msg.dst  = (char *) dst;
 
+        if (addr != NULL) {
+                msg.peer = poa_addr_s_to_msg(addr);
+                if (msg.peer == NULL)
+                        return -ENOMEM;
+        }
+
         recv_msg = send_recv_ipcp_msg(pid, &msg);
+
+        if (msg.peer != NULL)
+                poa_addr_msg__free_unpacked(msg.peer, NULL);
         if (recv_msg == NULL)
                 return -EIPCP;
 
@@ -267,10 +362,11 @@ int ipcp_enroll(pid_t               pid,
         return 0;
 }
 
-int ipcp_connect(pid_t        pid,
-                 const char * dst,
-                 const char * component,
-                 qosspec_t    qs)
+int ipcp_connect(pid_t                   pid,
+                 const char *            dst,
+                 const char *            component,
+                 qosspec_t               qs,
+                 const struct poa_addr * addr)
 {
         ipcp_msg_t    msg = IPCP_MSG__INIT;
         ipcp_msg_t *  recv_msg;
@@ -283,8 +379,21 @@ int ipcp_connect(pid_t        pid,
         msg.pid     = pid;
         msg.qosspec = qos_spec_s_to_msg(&qs);
 
+        if (addr != NULL) {
+                msg.peer = poa_addr_s_to_msg(addr);
+                if (msg.peer == NULL) {
+                        free(msg.qosspec);
+                        return -ENOMEM;
+                }
+        }
+
         recv_msg = send_recv_ipcp_msg(pid, &msg);
+
+        if (msg.peer != NULL)
+                poa_addr_msg__free_unpacked(msg.peer, NULL);
+
         free(msg.qosspec);
+
         if (recv_msg == NULL)
                 return -EIPCP;
 
@@ -457,6 +566,8 @@ int ipcp_flow_update(const struct flow_info * flow,
         msg.has_pk       = true;
         msg.pk.data      = data.data;
         msg.pk.len       = data.len;
+        msg.has_is_poa    = true;
+        msg.is_poa        = reg_flow_is_poa(flow->id);
 
         recv_msg = send_recv_ipcp_msg(flow->n_1_pid, &msg);
         if (recv_msg == NULL) {
@@ -538,6 +649,8 @@ int ipcp_flow_alloc_resp(const struct flow_info * flow,
         msg.has_pk       = response == 0;
         msg.pk.data      = data.data;
         msg.pk.len       = data.len;
+        msg.has_is_poa    = true;
+        msg.is_poa        = reg_flow_is_poa(flow->id);
 
         recv_msg = send_recv_ipcp_msg(flow->n_1_pid, &msg);
         if (recv_msg == NULL)
@@ -567,6 +680,8 @@ int ipcp_flow_dealloc(pid_t  pid,
         msg.flow_id       = flow_id;
         msg.has_timeo_sec = true;
         msg.timeo_sec     = timeo;
+        msg.has_is_poa     = true;
+        msg.is_poa         = reg_flow_is_poa(flow_id);
 
         recv_msg = send_recv_ipcp_msg(pid, &msg);
         if (recv_msg == NULL)

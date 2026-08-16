@@ -50,6 +50,7 @@
 struct oap_cli_ctx {
         uint8_t           __id[OAP_ID_SIZE];
         buffer_t          id;
+        char              peer[NAME_SIZE + 1]; /* expected server name */
         uint8_t           kex_buf[CRYPT_KEY_BUFSZ];
         uint8_t           req_hash[MAX_HASH_SIZE];
         size_t            req_hash_len;
@@ -241,6 +242,7 @@ static int do_client_kex_prepare(const char *         server_name,
 
 int oap_cli_prepare(void **                  ctx,
                     const struct name_info * info,
+                    const char *             peer,
                     buffer_t *               req_buf,
                     buffer_t                 data,
                     bool                     rekey)
@@ -259,6 +261,11 @@ int oap_cli_prepare(void **                  ctx,
         clrbuf(*req_buf);
         *ctx = NULL;
 
+        if (peer != NULL && strlen(peer) > NAME_SIZE) {
+                log_err("Peer name too long.");
+                return -EINVAL;
+        }
+
         /* Allocate ctx to carry between prepare and complete */
         s = malloc(sizeof(*s));
         if (s == NULL) {
@@ -269,13 +276,15 @@ int oap_cli_prepare(void **                  ctx,
         memset(s, 0, sizeof(*s));
         OAP_CLI_CTX_INIT(s);
 
+        strcpy(s->peer, peer != NULL ? peer : info->name);
+
         /* Generate session ID */
         if (random_buffer(s->__id, OAP_ID_SIZE) < 0) {
                 log_err("Failed to generate OAP session ID.");
                 goto fail_id;
         }
 
-        log_dbg_id(s->id.data, "Preparing OAP request for %s.", info->name);
+        log_dbg_id(s->id.data, "Preparing OAP request for %s.", s->peer);
 
         /* Load client credentials */
         if (load_cli_credentials(info, &pkp, &crt) < 0) {
@@ -315,7 +324,7 @@ int oap_cli_prepare(void **                  ctx,
 
         oap_hdr_init(&s->local_hdr, s->id, s->kex_buf, data, s->scfg.c.nid);
 
-        if (do_client_kex_prepare(info->name, s) < 0) {
+        if (do_client_kex_prepare(s->peer, s) < 0) {
                 log_err_id(s->id.data, "Failed to prepare client KEX.");
                 goto fail_kex;
         }
@@ -482,7 +491,8 @@ static int do_client_kex_complete(struct oap_cli_ctx *   s,
         }
 
         SET_KEX_CIPHER(scfg, peer_hdr->cipher_str);
-        if (crypt_validate_nid(scfg->c.nid) < 0) {
+
+        if (crypt_cipher_rank(scfg->c.nid) < 0) {
                 log_err_id(id, "Server cipher '%s' not supported.",
                            peer_hdr->cipher_str);
                 return -ENOTSUP;
@@ -518,13 +528,12 @@ static int do_client_kex_complete(struct oap_cli_ctx *   s,
         return do_client_kex_complete_dhe(s, peer_hdr, sk);
 }
 
-int oap_cli_complete(void *                   ctx,
-                     const struct name_info * info,
-                     buffer_t                 rsp_buf,
-                     buffer_t *               data,
-                     struct crypt_sk *        sk,
-                     const buffer_t *         cached_crt,
-                     buffer_t *               peer_crt)
+int oap_cli_complete(void *            ctx,
+                     buffer_t          rsp_buf,
+                     buffer_t *        data,
+                     struct crypt_sk * sk,
+                     const buffer_t *  cached_crt,
+                     buffer_t *        peer_crt)
 {
         struct oap_cli_ctx * s = ctx;
         struct oap_hdr       peer_hdr;
@@ -538,7 +547,6 @@ int oap_cli_complete(void *                   ctx,
         int                  rc;
 
         assert(ctx != NULL);
-        assert(info != NULL);
         assert(data != NULL);
         assert(sk != NULL);
 
@@ -550,7 +558,7 @@ int oap_cli_complete(void *                   ctx,
 
         id = s->id.data;
 
-        log_dbg_id(id, "Completing OAP for %s.", info->name);
+        log_dbg_id(id, "Completing OAP for %s.", s->peer);
 
         /* Decode response header using client's md_nid for hash length */
         if (oap_hdr_decode(&peer_hdr, rsp_buf, s->req_md_nid, false) < 0) {
@@ -616,9 +624,9 @@ int oap_cli_complete(void *                   ctx,
         }
 
         /* Verify peer certificate name matches expected destination */
-        if (peer_hdr.crt.len > 0 && strcmp(peer, info->name) != 0) {
+        if (peer_hdr.crt.len > 0 && strcmp(peer, s->peer) != 0) {
                 log_err_id(id, "Peer crt for '%s' does not match '%s'.",
-                         peer, info->name);
+                         peer, s->peer);
                 goto fail_oap;
         }
 
@@ -667,7 +675,7 @@ int oap_cli_complete(void *                   ctx,
                 goto fail_oap;
         }
 
-        log_info_id(id, "OAP completed for %s.", info->name);
+        log_info_id(id, "OAP completed for %s.", s->peer);
 
         freebuf(peer_hdr.sealed_pt);
 

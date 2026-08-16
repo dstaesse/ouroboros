@@ -49,10 +49,4 @@ if(HAVE_FUSE)
   if(IPCP_FLOW_STATS)
     message(STATUS "IPCP flow statistics enabled")
   endif()
-
-  set(IPCP_ETH_FLOW_STATS FALSE CACHE BOOL
-      "Enable ipcpd-eth flow statistics via RIB")
-  if(IPCP_ETH_FLOW_STATS)
-    message(STATUS "ipcpd-eth flow statistics enabled")
-  endif()
 endif()

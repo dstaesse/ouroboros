@@ -51,6 +51,18 @@ int do_bootstrap_ipcp(int     argc,
 int do_enroll_ipcp(int     argc,
                    char ** argv);
 
+int poa_cmd(int     argc,
+            char ** argv);
+
+int do_attach_ipcp(int     argc,
+                   char ** argv);
+
+int do_detach_ipcp(int     argc,
+                   char ** argv);
+
+int do_list_poas(int     argc,
+                 char ** argv);
+
 int do_connect_ipcp(int     argc,
                     char ** argv);
 

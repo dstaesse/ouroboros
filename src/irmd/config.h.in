@@ -21,10 +21,6 @@
  */
 
 
-#define IPCP_UDP4_EXEC         "@IPCP_UDP4_TARGET@"
-#define IPCP_UDP6_EXEC         "@IPCP_UDP6_TARGET@"
-#define IPCP_ETH_LLC_EXEC      "@IPCP_ETH_LLC_TARGET@"
-#define IPCP_ETH_DIX_EXEC      "@IPCP_ETH_DIX_TARGET@"
 #define IPCP_UNICAST_EXEC      "@IPCP_UNICAST_TARGET@"
 #define IPCP_BROADCAST_EXEC    "@IPCP_BROADCAST_TARGET@"
 #define IPCP_LOCAL_EXEC        "@IPCP_LOCAL_TARGET@"
@@ -74,6 +70,8 @@
 #define OUROBOROS_SRV_CRT_DIR  "@OUROBOROS_SRV_CRT_DIR@"
 #define OUROBOROS_CLI_CRT_DIR  "@OUROBOROS_CLI_CRT_DIR@"
 #define OUROBOROS_CHAIN_DIR    "@OUROBOROS_UNTRUSTED_DIR@"
+
+/* Endpoint peers are keyed on their address, not on a service name. */
 
 #define IRMD_PKILL_TIMEOUT     @IRMD_PKILL_TIMEOUT@
 

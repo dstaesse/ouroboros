@@ -61,6 +61,7 @@
 
 #include <dirent.h>
 #include <grp.h>
+#include <netdb.h>
 #include <pwd.h>
 #include <signal.h>
 #include <spawn.h>
@@ -225,18 +226,6 @@ static pid_t spawn_ipcp(struct ipcp_info * info)
         case IPCP_BROADCAST:
                 exec_name = IPCP_BROADCAST_EXEC;
                 break;
-        case IPCP_UDP4:
-                exec_name = IPCP_UDP4_EXEC;
-                break;
-        case IPCP_UDP6:
-                exec_name = IPCP_UDP6_EXEC;
-                break;
-        case IPCP_ETH_LLC:
-                exec_name = IPCP_ETH_LLC_EXEC;
-                break;
-        case IPCP_ETH_DIX:
-                exec_name = IPCP_ETH_DIX_EXEC;
-                break;
         case IPCP_LOCAL:
                 exec_name = IPCP_LOCAL_EXEC;
                 break;
@@ -367,9 +356,6 @@ int bootstrap_ipcp(pid_t                pid,
                 goto fail;
         }
 
-        if (conf->type == IPCP_UDP4 || conf->type == IPCP_UDP6)
-                conf->layer_info.dir_hash_algo = (enum pol_dir_hash) HASH_MD5;
-
         if (ipcp_bootstrap(pid, conf, &layer)) {
                 log_err("Could not bootstrap IPCP.");
                 goto fail;
@@ -389,8 +375,55 @@ int bootstrap_ipcp(pid_t                pid,
         return -1;
 }
 
-int enroll_ipcp(pid_t        pid,
-                const char * dst)
+ssize_t list_poas(pid_t              pid,
+                  struct poa_spec ** eps)
+{
+        struct ipcp_info info;
+
+        info.pid = pid;
+        if (reg_get_ipcp(&info, NULL) < 0) {
+                log_err("Could not find IPCP %d.", pid);
+                return -1;
+        }
+
+        if (info.type != IPCP_UNICAST && info.type != IPCP_BROADCAST)
+                return 0; /* nothing it could be attached to */
+
+        return ipcp_list_poas(pid, eps);
+}
+
+/* Only the types that can carry a PoA may take one. */
+int attach_ipcp(pid_t                   pid,
+                const struct poa_spec * poa,
+                bool                    attach)
+{
+        struct ipcp_info info;
+
+        info.pid = pid;
+        if (reg_get_ipcp(&info, NULL) < 0) {
+                log_err("Could not find IPCP %d.", pid);
+                return -1;
+        }
+
+        if (info.type != IPCP_UNICAST && info.type != IPCP_BROADCAST) {
+                log_err("IPCP %d does not support PoAs.", pid);
+                return -1;
+        }
+
+        if (ipcp_attach(pid, poa, attach) < 0) {
+                log_err("Could not %s IPCP %d.",
+                        attach ? "attach" : "detach", pid);
+                return -1;
+        }
+
+        log_info("%s IPCP %d.", attach ? "Attached" : "Detached", pid);
+
+        return 0;
+}
+
+int enroll_ipcp(pid_t                   pid,
+                const char *            dst,
+                const struct poa_addr * addr)
 {
         struct layer_info layer;
         struct ipcp_info  info;
@@ -402,7 +435,7 @@ int enroll_ipcp(pid_t        pid,
                 goto fail;
         }
 
-        if (ipcp_enroll(pid, dst, &layer) < 0) {
+        if (ipcp_enroll(pid, dst, addr, &layer) < 0) {
                 log_err("Could not enroll IPCP %d.", pid);
                 goto fail;
         }
@@ -421,10 +454,11 @@ int enroll_ipcp(pid_t        pid,
         return -1;
 }
 
-int connect_ipcp(pid_t        pid,
-                 const char * dst,
-                 const char * component,
-                 qosspec_t    qs)
+int connect_ipcp(pid_t                   pid,
+                 const char *            dst,
+                 const char *            component,
+                 qosspec_t               qs,
+                 const struct poa_addr * addr)
 {
         struct ipcp_info info;
 
@@ -442,7 +476,7 @@ int connect_ipcp(pid_t        pid,
 
         log_dbg("Connecting %s to %s.", component, dst);
 
-        if (ipcp_connect(pid, dst, component, qs)) {
+        if (ipcp_connect(pid, dst, component, qs, addr) < 0) {
                 log_err("Could not connect IPCP %d to %s.", pid, dst);
                 return -EPERM;
         }
@@ -451,6 +485,172 @@ int connect_ipcp(pid_t        pid,
                  component, pid, dst);
 
         return 0;
+}
+
+/* Resolve the dial name, if any, and fill in one record. */
+static int poa_addr_resolve(struct poa_addr *  addr,
+                            struct addrinfo ** res)
+{
+        struct addrinfo hints;
+
+        *res = NULL;
+
+        if (addr == NULL)
+                return 0;
+
+        if (addr->hostname[0] == '\0')
+                return addr->type == POA_UDP ? -EINVAL : 0;
+
+        if (addr->type != POA_UDP)
+                return -EINVAL;
+
+        memset(&hints, 0, sizeof(hints));
+
+        hints.ai_family   = AF_UNSPEC;
+        hints.ai_socktype = SOCK_DGRAM;
+        if (getaddrinfo(addr->hostname, NULL, &hints, res) != 0) {
+                log_err("Failed to resolve %s.", addr->hostname);
+                return -EADDRNOTAVAIL;
+        }
+
+        return 0;
+}
+
+static void poa_addr_from_ai(struct poa_addr *       addr,
+                             const struct addrinfo * ai,
+                             uint16_t                port)
+{
+        struct sockaddr_in *  in;
+        struct sockaddr_in6 * in6;
+
+        if (ai->ai_family == AF_INET) {
+                in = (struct sockaddr_in *) ai->ai_addr;
+                addr->type         = POA_UDP4;
+                addr->udp4.ip_addr = in->sin_addr;
+                addr->udp4.port    = port;
+        } else {
+                in6 = (struct sockaddr_in6 *) ai->ai_addr;
+                addr->type         = POA_UDP6;
+                addr->udp6.ip_addr = in6->sin6_addr;
+                addr->udp6.port    = port;
+        }
+}
+
+/* Skip families without an attached PoA; keep all if none reported. */
+static void poa_families(pid_t  pid,
+                         bool * v4,
+                         bool * v6)
+{
+        struct poa_spec * eps;
+        ssize_t           n;
+        ssize_t           i;
+
+        eps = NULL;
+
+        *v4 = false;
+        *v6 = false;
+
+        n = list_poas(pid, &eps);
+        for (i = 0; i < n; i++) {
+                if (eps[i].type == POA_UDP4)
+                        *v4 = true;
+
+                if (eps[i].type == POA_UDP6)
+                        *v6 = true;
+        }
+
+        free(eps);
+
+        if (!*v4 && !*v6) {
+                *v4 = true;
+                *v6 = true;
+        }
+}
+
+/* Try each resolved record in order until an enrolment succeeds. */
+int enroll_ipcp_resolve(pid_t             pid,
+                        const char *      dst,
+                        struct poa_addr * addr)
+{
+        struct addrinfo * res;
+        struct addrinfo * ai;
+        uint16_t          port;
+        bool              v4;
+        bool              v6;
+        int               ret;
+
+        ret = poa_addr_resolve(addr, &res);
+        if (ret < 0)
+                return ret;
+
+        if (res == NULL)
+                return enroll_ipcp(pid, dst, addr);
+
+        port = addr->udp4.port; /* POA_UDP parks it there */
+
+        poa_families(pid, &v4, &v6);
+
+        ret = -EADDRNOTAVAIL;
+
+        for (ai = res; ai != NULL; ai = ai->ai_next) {
+                if ((ai->ai_family == AF_INET && !v4)
+                    || (ai->ai_family == AF_INET6 && !v6))
+                        continue;
+
+                poa_addr_from_ai(addr, ai, port);
+
+                ret = enroll_ipcp(pid, dst, addr);
+                if (ret == 0)
+                        break;
+        }
+
+        freeaddrinfo(res);
+
+        return ret;
+}
+
+/* Try each resolved record in order until a connect succeeds. */
+int connect_ipcp_resolve(pid_t             pid,
+                         const char *      dst,
+                         const char *      component,
+                         qosspec_t         qs,
+                         struct poa_addr * addr)
+{
+        struct addrinfo * res;
+        struct addrinfo * ai;
+        uint16_t          port;
+        bool              v4;
+        bool              v6;
+        int               ret;
+
+        ret = poa_addr_resolve(addr, &res);
+        if (ret < 0)
+                return ret;
+
+        if (res == NULL)
+                return connect_ipcp(pid, dst, component, qs, addr);
+
+        port = addr->udp4.port; /* POA_UDP parks it there */
+
+        poa_families(pid, &v4, &v6);
+
+        ret = -EADDRNOTAVAIL;
+
+        for (ai = res; ai != NULL; ai = ai->ai_next) {
+                if ((ai->ai_family == AF_INET && !v4)
+                    || (ai->ai_family == AF_INET6 && !v6))
+                        continue;
+
+                poa_addr_from_ai(addr, ai, port);
+
+                ret = connect_ipcp(pid, dst, component, qs, addr);
+                if (ret == 0)
+                        break;
+        }
+
+        freeaddrinfo(res);
+
+        return ret;
 }
 
 static int disconnect_ipcp(pid_t        pid,
@@ -882,6 +1082,22 @@ static void __cleanup_flow(void * flow)
         reg_destroy_flow(((struct flow_info *) flow)->id);
 }
 
+/*
+ * A PoA flow is secured as the IPCP that owns it: trust is in the
+ * peer itself. Without a security config for that name the flow
+ * stays in the clear.
+ */
+static void poa_name_info(const char *       name,
+                          struct name_info * info)
+{
+        if (reg_get_name_info(name, info) == 0)
+                return;
+
+        memset(info, 0, sizeof(*info));
+
+        strcpy(info->name, name);
+}
+
 static int flow_accept(struct flow_info * flow,
                        buffer_t *         data,
                        struct timespec *  abstime,
@@ -942,7 +1158,9 @@ static int flow_accept(struct flow_info * flow,
                 goto fail_oap;
         }
 
-        if (reg_get_name_info(name, &info) < 0) {
+        if (reg_flow_is_poa(flow->id)) {
+                poa_name_info(name, &info);
+        } else if (reg_get_name_info(name, &info) < 0) {
                 log_err("Failed to get name info for %s.", name);
                 err = -ENAME;
                 goto fail_oap;
@@ -1262,7 +1480,7 @@ static int flow_alloc_direct(const char *       dst,
                 return -EAGAIN;
         }
 
-        if (oap_cli_prepare(&ctx, info, &req_hdr, *data, false) < 0) {
+        if (oap_cli_prepare(&ctx, info, NULL, &req_hdr, *data, false) < 0) {
                 log_err("Failed to prepare OAP for %s.", dst);
                 return -EBADF;
         }
@@ -1295,7 +1513,7 @@ static int flow_alloc_direct(const char *       dst,
                 return -ETIMEDOUT;
         }
 
-        err = oap_cli_complete(ctx, info, resp_hdr, data, sk, NULL, NULL);
+        err = oap_cli_complete(ctx, resp_hdr, data, sk, NULL, NULL);
         if (err < 0) {
                 log_err("OAP completion failed for %s.", dst);
                 freebuf(resp_hdr);
@@ -1378,7 +1596,7 @@ static int flow_alloc(const char *       dst,
                 goto fail_prepare;
         }
 
-        if (oap_cli_prepare(&ctx, &info, &req_hdr, *data, false) < 0) {
+        if (oap_cli_prepare(&ctx, &info, NULL, &req_hdr, *data, false) < 0) {
                 log_err("Failed to prepare OAP request for %s.", dst);
                 err = -EBADF;
                 goto fail_prepare;
@@ -1410,7 +1628,7 @@ static int flow_alloc(const char *       dst,
                 goto fail_peer;
         }
 
-        err = oap_cli_complete(ctx, &info, resp_hdr, data, sk, NULL, &peer_crt);
+        err = oap_cli_complete(ctx, resp_hdr, data, sk, NULL, &peer_crt);
         if (err < 0) {
                 log_err("OAP completion failed for %s.", dst);
                 goto fail_complete;
@@ -1442,6 +1660,199 @@ static int flow_alloc(const char *       dst,
         reg_destroy_flow(flow->id);
  fail_flow:
         return err;
+}
+
+/* Creates the flow and prepares the key exchange the IPCP will carry. */
+/* The N-1 is only known once the flow exists. */
+static int poa_alloc(struct flow_info * flow,
+                     const char *       dst,
+                     buffer_t *         data)
+{
+        struct ipcp_info  ipcp;
+        struct layer_info layer;
+        struct name_info  info;
+        buffer_t          req_hdr = BUF_INIT;
+        void *            ctx;
+        int               err;
+
+        ipcp.pid = flow->n_pid;
+        if (reg_get_ipcp(&ipcp, &layer) < 0) {
+                log_err("No IPCP with pid %d.", flow->n_pid);
+
+                err = -EIPCP;
+                goto fail_flow;
+        }
+
+        flow->n_1_pid = 0;
+        if (reg_create_flow(flow) < 0) {
+                log_err("Failed to create PoA flow.");
+
+                err = -EBADF;
+                goto fail_flow;
+        }
+
+        reg_set_name_for_flow_id(ipcp.name, flow->id);
+
+        if (reg_flow_set_poa(flow->id) < 0) {
+                err = -EBADF;
+                goto fail_prepare;
+        }
+
+        flow->uid     = reg_get_proc_uid(flow->n_pid);
+        flow->n_1_pid = flow->n_pid; /* the IPCP is its own N-1 */
+        if (reg_prepare_flow_alloc(flow) < 0) {
+                log_err("Failed to prepare PoA flow allocation.");
+
+                err = -EBADF;
+                goto fail_prepare;
+        }
+
+        poa_name_info(ipcp.name, &info);
+
+        if (oap_cli_prepare(&ctx, &info, dst, &req_hdr, *data, false) < 0) {
+                log_err("Failed to prepare OAP request for %s.", ipcp.name);
+
+                err = -EBADF;
+                goto fail_prepare;
+        }
+
+        if (reg_flow_set_oap_ctx(flow->id, ctx) < 0) {
+                err = -EBADF;
+                goto fail_ctx;
+        }
+
+        log_info("Allocating PoA flow %d for %d as %s.",
+                 flow->id, flow->n_pid, ipcp.name);
+
+        *data = req_hdr;
+
+        return 0;
+
+ fail_ctx:
+        freebuf(req_hdr);
+        oap_ctx_free(ctx);
+ fail_prepare:
+        reg_destroy_flow(flow->id);
+ fail_flow:
+        return err;
+}
+
+/* Completes the key exchange once the IPCP has the peer's response. */
+/*
+ * We present the PoA's own credentials and expect the peer to present
+ * dst's: the address only says how to reach it. oap_cli_complete
+ * frees the ctx on every path.
+ */
+static int poa_complete(struct flow_info * flow,
+                        int                response,
+                        buffer_t *         data,
+                        struct crypt_sk *  sk)
+{
+        struct name_info info;
+        buffer_t         peer_crt = BUF_INIT;
+        buffer_t         out = BUF_INIT;
+        buffer_t         empty = BUF_INIT;
+        char             name[NAME_SIZE + 1];
+        void *           ctx;
+        int              err;
+
+        ctx = reg_flow_take_oap_ctx(flow->id);
+        if (ctx == NULL) {
+                log_err("No pending PoA flow %d.", flow->id);
+                return -EBADF;
+        }
+
+        if (response < 0) {
+                log_dbg("PoA flow %d refused: %d.", flow->id, response);
+
+                err = response;
+                goto fail;
+        }
+
+        if (reg_get_name_for_flow_id(name, flow->id) < 0) {
+                err = -EBADF;
+                goto fail;
+        }
+
+        poa_name_info(name, &info);
+
+        err = oap_cli_complete(ctx, *data, &out, sk, NULL, &peer_crt);
+        if (err < 0) {
+                log_err("OAP completion failed for %s.", name);
+
+                ctx = NULL;
+                goto fail;
+        }
+
+        if (sk->nid != NID_undef)
+                reg_flow_set_rekey(flow->id, true, peer_crt);
+
+        flow->state = FLOW_ALLOCATED;
+        if (reg_respond_alloc(flow, &empty, 0) < 0) {
+                log_err("Failed to update PoA flow %d.", flow->id);
+
+                err = -EBADF;
+                goto fail_crt;
+        }
+
+        log_info("PoA flow %d allocated to %s.", flow->id, name);
+
+        freebuf(peer_crt);
+        freebuf(out);
+
+        return 0;
+
+ fail_crt:
+        freebuf(peer_crt);
+        freebuf(out);
+ fail:
+        oap_ctx_free(ctx);
+        reg_destroy_flow(flow->id);
+        return err;
+}
+
+/* A peer requested a flow on a PoA of this IPCP. */
+static int poa_req_arr(struct flow_info * flow,
+                       buffer_t *         data)
+{
+        struct ipcp_info  ipcp;
+        struct layer_info layer;
+        int               ret;
+
+        ipcp.pid = flow->n_1_pid;
+        if (reg_get_ipcp(&ipcp, &layer) < 0) {
+                log_err("No IPCP with pid %d.", flow->n_1_pid);
+
+                ret = -EIPCP;
+                goto fail;
+        }
+
+        log_info("PoA flow request arrived for %s.", ipcp.name);
+
+        ret = wait_for_accept(ipcp.name);
+        if (ret < 0) {
+                log_err("No active process for %s.", ipcp.name);
+                goto fail;
+        }
+
+        flow->id    = ret;
+        flow->state = FLOW_ALLOCATED;
+        if (reg_flow_set_poa(flow->id) < 0) {
+                ret = -EBADF;
+                goto fail;
+        }
+
+        reg_set_name_for_flow_id(ipcp.name, flow->id);
+
+        ret = reg_respond_accept(flow, data);
+        if (ret < 0) {
+                log_err("Failed to respond to PoA flow %d.", flow->id);
+                goto fail;
+        }
+
+        return 0;
+ fail:
+        return ret;
 }
 
 static int flow_alloc_reply(struct flow_info * flow,
@@ -1596,6 +2007,11 @@ static int rekey_name_info(int                flow_id,
         if (reg_get_name_for_flow_id(name, flow_id) < 0)
                 return -1;
 
+        if (reg_flow_is_poa(flow_id)) {
+                poa_name_info(name, info);
+                return 0;
+        }
+
         return reg_get_name_info(name, info);
 }
 
@@ -1667,7 +2083,7 @@ static void rekey_do_initiate(struct list_head * tbl,
                 goto fail;
         }
 
-        if (oap_cli_prepare(&ctx, &name, &req, data, true) < 0) {
+        if (oap_cli_prepare(&ctx, &name, NULL, &req, data, true) < 0) {
                 log_err("Failed to prepare re-key for flow %d.", flow_id);
                 goto fail;
         }
@@ -1758,7 +2174,7 @@ static void rekey_do_complete(struct list_head * tbl,
         reg_flow_get_peer_crt(flow_id, &crt);
 
         /* oap_cli_complete frees the ctx on every path. */
-        if (oap_cli_complete(e->ctx, &info, buf, &data, &sk, &crt, NULL) < 0) {
+        if (oap_cli_complete(e->ctx, buf, &data, &sk, &crt, NULL) < 0) {
                 log_warn("Failed to complete re-key for flow %d.", flow_id);
                 e->ctx = NULL;
                 goto finish_clear;
@@ -1933,7 +2349,7 @@ static void rekey_do_direct(int flow_id)
                 return;
         }
 
-        if (oap_cli_prepare(&ctx, &info, &req, data, true) < 0) {
+        if (oap_cli_prepare(&ctx, &info, NULL, &req, data, true) < 0) {
                 log_err("Failed to prepare re-key for flow %d.", flow_id);
                 reg_flow_clear_in_flight(flow_id);
                 return;
@@ -2307,6 +2723,10 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg,
         pid_t               cpid;
         irm_msg_t *         ret_msg;
         buffer_t            data;
+        struct poa_addr      poa_addr;
+        struct poa_addr *    pa;
+        struct poa_spec      poa_spec;
+        struct poa_spec *    eps = NULL;
 
         memset(&flow, 0, sizeof(flow));
 
@@ -2350,11 +2770,74 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg,
                 res = bootstrap_ipcp(msg->pid, &conf);
                 break;
         case IRM_MSG_CODE__IRM_ENROLL_IPCP:
-                res = enroll_ipcp(msg->pid, msg->dst);
+                if (msg->peer != NULL) {
+                        poa_addr = poa_addr_msg_to_s(msg->peer);
+                        if (poa_addr.type == POA_INVALID) {
+                                res = -EINVAL;
+                                break;
+                        }
+                }
+
+                if (msg->conf != NULL)
+                        conf = ipcp_config_msg_to_s(msg->conf);
+                res = enroll_ipcp_resolve(msg->pid, msg->dst,
+                                          msg->peer != NULL ? &poa_addr : NULL);
+                break;
+        case IRM_MSG_CODE__IRM_ATTACH_IPCP:
+                poa_spec = poa_spec_msg_to_s(msg->poa);
+                if (poa_spec.type == POA_INVALID) {
+                        res = -EINVAL;
+                        break;
+                }
+
+                res = attach_ipcp(msg->pid, &poa_spec, true);
+                break;
+        case IRM_MSG_CODE__IRM_DETACH_IPCP:
+                poa_spec = poa_spec_msg_to_s(msg->poa);
+                if (poa_spec.type == POA_INVALID) {
+                        res = -EINVAL;
+                        break;
+                }
+
+                res = attach_ipcp(msg->pid, &poa_spec, false);
+                break;
+        case IRM_MSG_CODE__IRM_LIST_POAS:
+                res = list_poas(msg->pid, &eps);
+                if (res > 0) {
+                        ssize_t i;
+                        ret_msg->poas = malloc(res * sizeof(*ret_msg->poas));
+                        if (ret_msg->poas == NULL) {
+                                free(eps);
+
+                                res = -ENOMEM;
+                                break;
+                        }
+                        for (i = 0; i < res; i++) {
+                                ret_msg->poas[i] = poa_spec_s_to_msg(&eps[i]);
+                                if (ret_msg->poas[i] == NULL)
+                                        break;
+                                ret_msg->n_poas++;
+                        }
+                        res = i == res ? 0 : -ENOMEM;
+                }
+                free(eps);
                 break;
         case IRM_MSG_CODE__IRM_CONNECT_IPCP:
                 flow.qs = qos_spec_msg_to_s(msg->qosspec);
-                res = connect_ipcp(msg->pid, msg->dst, msg->comp, flow.qs);
+
+                pa = NULL;
+
+                if (msg->peer != NULL) {
+                        poa_addr = poa_addr_msg_to_s(msg->peer);
+                        if (poa_addr.type == POA_INVALID) {
+                                res = -EINVAL;
+                                break;
+                        }
+                        pa       = &poa_addr;
+                }
+
+                res = connect_ipcp_resolve(msg->pid, msg->dst, msg->comp,
+                                           flow.qs, pa);
                 break;
         case IRM_MSG_CODE__IRM_DISCONNECT_IPCP:
                 res = disconnect_ipcp(msg->pid, msg->dst, msg->comp);
@@ -2496,6 +2979,67 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg,
                 assert(data.len > 0 ? data.data != NULL : data.data == NULL);
                 flow = flow_info_msg_to_s(msg->flow_info);
                 res = flow_req_arr(&flow, msg->hash.data, &data);
+                if (res == 0)
+                        ret_msg->flow_info = flow_info_s_to_msg(&flow);
+                break;
+        case IRM_MSG_CODE__IRM_POA_FLOW_ALLOC:
+                flow = flow_info_msg_to_s(msg->flow_info);
+
+                clrbuf(data);
+
+                res = poa_alloc(&flow, msg->dst, &data);
+                if (res == 0) {
+                        ret_msg->flow_info = flow_info_s_to_msg(&flow);
+                        ret_msg->has_pk    = true;
+                        ret_msg->pk.len    = data.len;
+                        ret_msg->pk.data   = data.data;
+
+                        clrbuf(data);
+                }
+                break;
+        case IRM_MSG_CODE__IRM_POA_FLOW_ALLOC_R:
+                data.len     = msg->pk.len;
+                data.data    = msg->pk.data;
+                msg->pk.data = NULL; /* pass data */
+                msg->pk.len  = 0;
+                flow = flow_info_msg_to_s(msg->flow_info);
+                sk.key = kbuf;
+                res = poa_complete(&flow, msg->response, &data, &sk);
+
+                freebuf(data);
+
+                if (res != 0)
+                        break;
+
+                ret_msg->flow_info      = flow_info_s_to_msg(&flow);
+                ret_msg->has_cipher_nid = true;
+                ret_msg->cipher_nid     = sk.nid;
+
+                if (sk.nid == NID_undef)
+                        break;
+
+                hbuf = malloc(SYMMKEYSZ);
+                if (hbuf == NULL) {
+                        log_err("Failed to malloc key buf");
+
+                        res = -ENOMEM;
+                        break;
+                }
+
+                memcpy(hbuf, kbuf, SYMMKEYSZ);
+
+                ret_msg->sym_key.data = hbuf;
+                ret_msg->sym_key.len  = SYMMKEYSZ;
+                ret_msg->has_sym_key  = true;
+                break;
+        case IRM_MSG_CODE__IPCP_POA_FLOW_REQ_ARR:
+                data.len     = msg->pk.len;
+                data.data    = msg->pk.data;
+                msg->pk.data = NULL; /* pass data */
+                msg->pk.len  = 0;
+                flow = flow_info_msg_to_s(msg->flow_info);
+
+                res = poa_req_arr(&flow, &data);
                 if (res == 0)
                         ret_msg->flow_info = flow_info_s_to_msg(&flow);
                 break;

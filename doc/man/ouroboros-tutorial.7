@@ -47,37 +47,56 @@ The output should be
 .SH PINGING A SERVER APPLICATION OVER THE LOOPBACK ADAPTER
 
 With a running irmd, let's create an IPC process. For this tutorial,
-we will create and bootstrap an eth-llc IPCP over the loopback
-interface. To observe what's going on, open another terminal
-window. Note that "ipcp bootstrap" will create an IPCP if an IPCP by
-that name does not yet exist (See \fBouroboros\fR(8)).
+we will create a unicast IPCP, attach it to the loopback interface and
+bootstrap it. To observe what's going on, open another terminal
+window.
 
 .RS 4
-$ irm ipcp bootstrap type eth-llc name llc layer llc if lo
+$ irm ipcp create name lan type unicast
 .RE
 
 .RS 4
 ==23918== irmd(II): Created IPCP 23932.
-.br
-==23932== ipcpd/eth-llc(II): Using raw socket device.
-.br
-==23918== irmd(II): Bootstrapped IPCP 23932 in layer llc.
+.RE
+
+An IPCP needs a \fIpoint of attachment\fR: the transmission technology
+it sends and receives on. Attach it to the loopback interface (See
+\fBouroboros\fR(8)).
+
+.RS 4
+$ irm ipcp poa attach name lan eth dev lo
+.RE
+
+.RS 4
+==23918== irmd(II): Attached IPCP 23932.
+.RE
+
+.RS 4
+$ irm ipcp bootstrap name lan layer lan
+.RE
+
+.RS 4
+==23918== irmd(II): Bootstrapped IPCP 23932.
 .RE
 
 Now that we have the IPCP bootstrapped, it can act as a local network
 layer that can provide full connectivity between all processes in the
 system. Let's test it using the oping application. First, let's choose
-a name for the server ("my.oping.server") and register in the llc
+a name for the server ("my.oping.server") and register it in the lan
 layer.
 
 .RS 4
-$ irm reg name my.oping.server layer llc
+$ irm name create my.oping.server
+.br
+$ irm name register my.oping.server layer lan
 .RE
 
 The IRMd should respond with
 
 .RS 4
-==23918== irmd(II): Registered my.oping.server in llc as 716016b1.
+==23918== irmd(II): Created new name: my.oping.server.
+.br
+==23918== irmd(II): Registered my.oping.server with IPCP 23932 as 716016b1.
 .RE
 
 Now start a server of oping in the background (or in a different

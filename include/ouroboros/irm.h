@@ -46,16 +46,29 @@ int     irm_destroy_ipcp(pid_t pid);
 
 ssize_t irm_list_ipcps(struct ipcp_list_info ** ipcps);
 
-int     irm_enroll_ipcp(pid_t        pid,
-                        const char * dst);
+int     irm_enroll_ipcp(pid_t                   pid,
+                        const char *            dst,
+                        const struct poa_addr * addr);
 
 int     irm_bootstrap_ipcp(pid_t                      pid,
                            const struct ipcp_config * conf);
 
-int     irm_connect_ipcp(pid_t        pid,
-                         const char * dst,
-                         const char * component,
-                         qosspec_t    qs);
+/* Attach an IPCP to a medium; repeat for more than one PoA. */
+int     irm_attach_ipcp(pid_t                   pid,
+                        const struct poa_spec * poa);
+
+int     irm_detach_ipcp(pid_t                   pid,
+                        const struct poa_spec * poa);
+
+/* Caller frees *poas. */
+ssize_t irm_list_poas(pid_t              pid,
+                      struct poa_spec ** poas);
+
+int     irm_connect_ipcp(pid_t                   pid,
+                         const char *            dst,
+                         const char *            component,
+                         qosspec_t               qs,
+                         const struct poa_addr * addr);
 
 int     irm_disconnect_ipcp(pid_t        pid,
                             const char * dst,

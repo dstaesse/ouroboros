@@ -48,11 +48,17 @@ enum ipcp_type { /* IRMd uses order to select an IPCP for flow allocation. */
         IPCP_LOCAL = 0,
         IPCP_UNICAST,
         IPCP_BROADCAST,
-        IPCP_ETH_LLC,
-        IPCP_ETH_DIX,
-        IPCP_UDP4,
-        IPCP_UDP6,
         IPCP_INVALID
+};
+
+/* The medium a PoA sits on. */
+enum poa_type {
+        POA_UDP4 = 0,
+        POA_UDP6,
+        /* A name to resolve; the family is DNS's pick. Port in udp4. */
+        POA_UDP,
+        POA_ETH,
+        POA_INVALID
 };
 
 struct ipcp_info {
@@ -256,21 +262,50 @@ static const struct uni_config default_uni_config = {
         .cong_avoid     = CA_MB_ECN
 };
 
-struct eth_config {
+#define POA_UDP_PORT     3435   /* default UDP PoA port */
+#define POA_ETHERTYPE    0xA000 /* default Ethertype        */
+#define POA_MAC_SIZE     6
+#define POA_HOST_STRLEN  255
+
+struct eth_poa {
         char     dev[DEV_NAME_SIZE + 1];
-        uint16_t ethertype; /* DIX only*/
+        uint16_t ethertype;
+        uint8_t  mac[POA_MAC_SIZE];
 };
 
-struct udp4_config {
+struct udp4_poa {
         struct in_addr ip_addr;
-        struct in_addr dns_addr;
         uint16_t       port;
 };
 
-struct udp6_config {
+struct udp6_poa {
         struct in6_addr ip_addr;
-        struct in6_addr dns_addr;
         uint16_t        port;
+};
+
+/* PoA a unicast or broadcast IPCP attaches to. */
+struct poa_spec {
+        enum poa_type type;
+        union {
+                struct udp4_poa udp4;
+                struct udp6_poa udp6;
+                struct eth_poa  eth;
+        };
+};
+
+
+/* Peer PoA to connect to. */
+struct poa_addr {
+        enum poa_type type;
+        char          hostname[POA_HOST_STRLEN + 1]; /* resolved by IRMd */
+        union {
+                struct udp4_poa udp4;
+                struct udp6_poa udp6;
+                struct {
+                        struct eth_poa src;
+                        struct eth_poa dst;
+                } eth;
+        };
 };
 
 /* Layers */
@@ -285,58 +320,22 @@ struct ipcp_config {
         struct layer_info layer_info;
         enum ipcp_type    type;
 
-        union {
-                struct uni_config  unicast;
-                struct udp4_config udp4;
-                struct udp6_config udp6;
-                struct eth_config  eth;
-        };
+        struct uni_config unicast;
 };
 
 /* default configurations */
 static const struct ipcp_config local_default_conf = {
-        .type = IPCP_LOCAL,
-        .layer_info = {
-                .dir_hash_algo = DIR_HASH_SHA3_256
-        }
-};
-
-static const struct ipcp_config eth_dix_default_conf = {
-        .type = IPCP_ETH_DIX,
         .layer_info = {
                 .dir_hash_algo = DIR_HASH_SHA3_256
         },
-        .eth = {
-             .ethertype=0xA000,
-        }
-};
-
-static const struct ipcp_config eth_llc_default_conf = {
-        .type = IPCP_ETH_LLC,
-        .layer_info = {
-                .dir_hash_algo = DIR_HASH_SHA3_256
-        }
-};
-
-static const struct ipcp_config udp4_default_conf = {
-        .type = IPCP_UDP4,
-        .udp4 = {
-                .port = 3435
-        }
-};
-
-static const struct ipcp_config udp6_default_conf = {
-        .type = IPCP_UDP6,
-        .udp6 = {
-                .port = 3435
-        }
+        .type = IPCP_LOCAL
 };
 
 static const struct ipcp_config uni_default_conf = {
-        .type = IPCP_UNICAST,
         .layer_info = {
                 .dir_hash_algo = DIR_HASH_SHA3_256
         },
+        .type = IPCP_UNICAST,
         .unicast = {
                 .dt = {
                         .addr_size = 4,

@@ -2119,6 +2119,77 @@ bool reg_flow_is_direct(int flow_id)
         return ret;
 }
 
+bool reg_flow_is_poa(int flow_id)
+{
+        struct reg_flow * flow;
+        bool              ret;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        flow = __reg_get_flow(flow_id);
+
+        ret = flow != NULL && flow->poa;
+
+        pthread_mutex_unlock(&reg.mtx);
+
+        return ret;
+}
+
+int reg_flow_set_poa(int flow_id)
+{
+        struct reg_flow * flow;
+        int               ret = -1;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        flow = __reg_get_flow(flow_id);
+        if (flow != NULL) {
+                flow->poa = true;
+                ret = 0;
+        }
+
+        pthread_mutex_unlock(&reg.mtx);
+
+        return ret;
+}
+
+int reg_flow_set_oap_ctx(int    flow_id,
+                         void * ctx)
+{
+        struct reg_flow * flow;
+        int               ret = -1;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        flow = __reg_get_flow(flow_id);
+        if (flow != NULL) {
+                flow->oap_ctx = ctx;
+                ret = 0;
+        }
+
+        pthread_mutex_unlock(&reg.mtx);
+
+        return ret;
+}
+
+void * reg_flow_take_oap_ctx(int flow_id)
+{
+        struct reg_flow * flow;
+        void *            ctx = NULL;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        flow = __reg_get_flow(flow_id);
+        if (flow != NULL) {
+                ctx = flow->oap_ctx;
+                flow->oap_ctx = NULL;
+        }
+
+        pthread_mutex_unlock(&reg.mtx);
+
+        return ctx;
+}
+
 void reg_flow_set_rekey(int      flow_id,
                         bool     initiator,
                         buffer_t peer_crt)
@@ -2607,7 +2678,7 @@ void reg_notify_flow(int flow_id,
         pthread_mutex_unlock(&reg.mtx);
 }
 
-/* Wake both endpoints of a direct flow (acceptor and allocator). */
+/* Wake both PoAs of a direct flow (acceptor and allocator). */
 void reg_notify_flow_peers(int flow_id,
                            int event)
 {

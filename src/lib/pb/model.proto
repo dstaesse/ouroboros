@@ -58,6 +58,19 @@ message layer_info_msg {
         required uint32 dir_hash_algo = 2;
 }
 
+/* Address of a flow PoA peer. */
+message poa_addr_msg {
+        required uint32 type      = 1; /* enum poa_type */
+        optional uint32 ip4       = 2;
+        optional bytes  ip6       = 3;
+        optional uint32 port      = 4;
+        optional bytes  mac       = 5;
+        optional uint32 ethertype = 6;
+        optional string dev       = 7; /* our device, eth only    */
+        optional string hostname  = 8; /* IRMd resolves, UDP only */
+        optional bytes  src_mac   = 9; /* our MAC, eth only       */
+}
+
 message ipcp_info_msg {
         required uint32 type  = 1;
         required string name  = 2;

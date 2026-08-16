@@ -55,6 +55,12 @@ enum irm_msg_code {
         IRM_REPLY             = 27;
         IRM_FLOW_UPDATE       = 28;
         IPCP_FLOW_UPDATE_ARR  = 29;
+        IRM_POA_FLOW_ALLOC     = 30;
+        IRM_POA_FLOW_ALLOC_R   = 31;
+        IPCP_POA_FLOW_REQ_ARR  = 32;
+        IRM_ATTACH_IPCP       = 33;
+        IRM_DETACH_IPCP       = 34;
+        IRM_LIST_POAS    = 35;
 }
 
 message timespec_msg {
@@ -101,4 +107,7 @@ message irm_msg {
         optional uint32 generation       = 28; /* re-key batch generation */
         optional bool   rekey            = 29; /* re-key watermark trigger */
         optional bool   rk_initiator     = 30; /* re-key proof-holder side */
+        optional poa_addr_msg peer       = 32; /* peer PoA address     */
+        optional poa_spec_msg poa        = 33; /* PoA to attach        */
+        repeated poa_spec_msg poas       = 34; /* PoAs attached        */
 }

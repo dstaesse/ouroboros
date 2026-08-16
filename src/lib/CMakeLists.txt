@@ -95,9 +95,9 @@ endif()
 
 if(HAVE_LIBURCU)
   target_link_libraries(ouroboros-common PRIVATE Urcu::Urcu)
-  # urcu headers require C99; override the global -std=c89 for this TU only.
-  set_source_files_properties(crypt/keyrot.c PROPERTIES
-    COMPILE_OPTIONS "-std=gnu99")
+  # urcu headers require C99; override the global -std=c89 for these TUs.
+  set_source_files_properties(crypt/keyrot.c dev.c poa/addr.c poa/eth.c
+    poa/udp.c PROPERTIES COMPILE_OPTIONS "-std=gnu99")
 endif()
 
 install(TARGETS ouroboros-common
@@ -107,7 +107,13 @@ install(TARGETS ouroboros-common
 set(SOURCE_FILES_DEV
   cep.c
   dev.c
+  poa/addr.c
+  poa/udp.c
 )
+
+if(HAVE_ETH)
+  list(APPEND SOURCE_FILES_DEV poa/eth.c)
+endif()
 
 add_library(ouroboros-dev SHARED
   ${SOURCE_FILES_DEV}
@@ -130,6 +136,11 @@ target_include_directories(ouroboros-dev
     ${SYS_RND_HDR})
 
 target_link_libraries(ouroboros-dev PUBLIC ouroboros-common)
+
+if(HAVE_LIBURCU)
+  # dev.c calls urcu directly; do not rely on transitive linkage.
+  target_link_libraries(ouroboros-dev PRIVATE Urcu::Urcu)
+endif()
 
 install(TARGETS ouroboros-dev
   EXPORT OuroborosTargets

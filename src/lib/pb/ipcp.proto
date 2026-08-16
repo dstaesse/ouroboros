@@ -40,6 +40,9 @@ enum ipcp_msg_code {
         IPCP_DISCONNECT      = 11;
         IPCP_REPLY           = 12;
         IPCP_FLOW_UPDATE     = 13;
+        IPCP_ATTACH          = 14;
+        IPCP_DETACH          = 15;
+        IPCP_LIST_POAS  = 16;
 }
 
 message ipcp_msg {
@@ -58,4 +61,8 @@ message ipcp_msg {
         optional sint32 mpl                = 13; /* MPL in ms. */
         optional int32 result              = 14;
         optional uint32 uid                = 15; /* 0 = GSPP, >0 = PUP uid */
+        optional poa_addr_msg peer          = 16; /* peer PoA address       */
+        optional bool is_poa               = 17; /* flow rides a PoA       */
+        optional poa_spec_msg poa          = 18; /* PoA to attach          */
+        repeated poa_spec_msg poas         = 19; /* PoAs attached          */
 }

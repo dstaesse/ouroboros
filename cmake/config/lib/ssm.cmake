@@ -1,6 +1,5 @@
-# Secure Shared Memory (SSM) pool configuration for Ouroboros
-# This file defines the allocation parameters for the secure shared memory
-# pool allocator
+# Secure Shared Memory (SSM) pool configuration for Ouroboros This file defines the allocation
+# parameters for the secure shared memory pool allocator
 
 # Shared memory pool naming configuration
 set(SSM_PREFIX "ouroboros" CACHE STRING
@@ -21,6 +20,8 @@ set(SSM_PK_BUFF_TAILSPACE 32 CACHE STRING
     "Bytes of tailspace to reserve for future tails")
 set(SSM_RBUFF_SIZE 1024 CACHE STRING
     "Number of slots in a flow's rbuff ring; must be a power of 2")
+set(SSM_RBUFF_TXQ_DELAY 10 CACHE STRING
+    "Queueing delay a flow's tx ring may hold (ms); 0 is unlimited")
 set(SSM_RBUFF_PREFIX "/${SHM_PREFIX}.rbuff." CACHE INTERNAL
     "Prefix for rbuff POSIX shared memory filenames")
 set(SSM_FLOW_SET_PREFIX "/${SHM_PREFIX}.set." CACHE INTERNAL
@@ -32,8 +33,8 @@ set(SSM_POOL_SHARDS 4 CACHE STRING
 set(SSM_POOL_RECLAIM_AGE_S 60 CACHE STRING
     "Minimum age in seconds before a block is presumed stale and reclaimed")
 
-# Global Shared Packet Pool (GSPP) - for privileged processes
-# Shared by all processes in 'ouroboros' group (~60 MB total)
+# Global Shared Packet Pool (GSPP) - for privileged processes Shared by all processes in 'ouroboros'
+# group (~60 MB total)
 set(SSM_GSPP_256_BLOCKS 1024 CACHE STRING
     "GSPP: Number of 256B blocks")
 set(SSM_GSPP_512_BLOCKS 2048 CACHE STRING
@@ -53,8 +54,8 @@ set(SSM_GSPP_256K_BLOCKS 32 CACHE STRING
 set(SSM_GSPP_1M_BLOCKS 16 CACHE STRING
     "GSPP: Number of 1MB blocks")
 
-# Per-User Pool (PUP) - for unprivileged applications
-# Each unprivileged app gets its own smaller pool (~7.5 MB total)
+# Per-User Pool (PUP) - for unprivileged applications Each unprivileged app gets its own smaller
+# pool (~7.5 MB total)
 set(SSM_PUP_256_BLOCKS 512 CACHE STRING
     "PUP: Number of 256B blocks")
 set(SSM_PUP_512_BLOCKS 512 CACHE STRING
@@ -147,10 +148,9 @@ message(STATUS "    Blocks: ${SSM_PUP_256_BLOCKS}, ${SSM_PUP_512_BLOCKS}, "
     "${SSM_PUP_16K_BLOCKS}, ${SSM_PUP_64K_BLOCKS}, ${SSM_PUP_256K_BLOCKS}, "
     "${SSM_PUP_1M_BLOCKS}")
 
-# FRCT reorder queue must fit in every enabled size class. If RQ_SIZE
-# >= any backing pool, the receiver advertises a window the pool
-# cannot back; np1_flow_write fails under load and a single dropped
-# fragment wedges the flow. Auto-zeroed classes are skipped.
+# FRCT reorder queue must fit in every enabled size class. If RQ_SIZE >= any backing pool, the
+# receiver advertises a window the pool cannot back; np1_flow_write fails under load and a single
+# dropped fragment wedges the flow. Auto-zeroed classes are skipped.
 foreach(_class 256 512 1K 2K)
     if(SSM_PUP_${_class}_BLOCKS GREATER 0
        AND NOT FRCT_REORDER_QUEUE_SIZE LESS SSM_PUP_${_class}_BLOCKS)

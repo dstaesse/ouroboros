@@ -17,18 +17,18 @@ include(dependencies/crypt/libgcrypt)
 # IRMd
 include(dependencies/irmd/libtoml)
 
-# Ethernet IPCP backends
+# Ethernet PoA backends. netmap is last: it overrides the others.
 include(dependencies/eth/rawsockets)
 include(dependencies/eth/bpf)
 include(dependencies/eth/netmap)
-if(HAVE_RAW_SOCKETS OR HAVE_BPF OR HAVE_NETMAP)
-  set(HAVE_ETH TRUE CACHE INTERNAL "Ethernet IPCP support available")
-else()
-  unset(HAVE_ETH CACHE)
-endif()
 
-# UDP IPCP
-include(dependencies/udp/ddns)
+# The Ethernet PoA needs a backend to send and receive frames.
+if(HAVE_RAW_SOCKETS OR HAVE_BPF OR HAVE_NETMAP)
+  set(HAVE_ETH TRUE)
+else()
+  message(STATUS "No Ethernet backend, Ethernet PoAs disabled")
+  unset(HAVE_ETH)
+endif()
 
 # Coverage tools
 include(dependencies/coverage/gcov)

@@ -130,8 +130,8 @@ struct fa_flow {
         size_t   u_snd;    /* Flow updates sent              */
         size_t   u_rcv;    /* Flow updates received          */
 #endif
-        uint64_t s_eid;  /* Local endpoint id                */
-        uint64_t r_eid;  /* Remote endpoint id               */
+        uint64_t s_eid;  /* Local PoA id                     */
+        uint64_t r_eid;  /* Remote PoA id                    */
         uint64_t r_addr; /* Remote address                   */
         void *   ctx;    /* Congestion avoidance context     */
         uint64_t fair;   /* SFQ virtual finish tag (bytes)   */
@@ -208,8 +208,8 @@ static int fa_rib_read(const char * path,
         sprintf(buf,
                 "Flow established at:             %20s\n"
                 "Remote address:                  %20s\n"
-                "Local endpoint ID:               %20s\n"
-                "Remote endpoint ID:              %20s\n"
+                "Local PoA ID:               %20s\n"
+                "Remote PoA ID:              %20s\n"
                 "Sent (packets):                  %20zu\n"
                 "Sent (bytes):                    %20zu\n"
                 "Send failed (packets):           %20zu\n"

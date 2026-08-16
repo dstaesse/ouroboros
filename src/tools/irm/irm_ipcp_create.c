@@ -46,10 +46,6 @@
 
 #define UNICAST                "unicast"
 #define BROADCAST              "broadcast"
-#define UDP4                   "udp4"
-#define UDP6                   "udp6"
-#define ETH_LLC                "eth-llc"
-#define ETH_DIX                "eth-dix"
 #define LOCAL                  "local"
 
 static void usage(void)
@@ -57,8 +53,7 @@ static void usage(void)
         printf("Usage: irm ipcp create\n"
                "                name <ipcp name>\n"
                "                type [TYPE]\n\n"
-               "where TYPE in {" UNICAST " " BROADCAST " " LOCAL " "
-               UDP4 " " UDP6 " " ETH_LLC " " ETH_DIX "}\n");
+               "where TYPE in {" UNICAST " " BROADCAST " " LOCAL "}\n");
 }
 
 int do_create_ipcp(int     argc,
@@ -93,16 +88,8 @@ int do_create_ipcp(int     argc,
                 type = IPCP_UNICAST;
         else if (strcmp(ipcp_type, BROADCAST) == 0)
                 type = IPCP_BROADCAST;
-        else if (strcmp(ipcp_type, UDP4) == 0)
-                type = IPCP_UDP4;
-        else if (strcmp(ipcp_type, UDP6) == 0)
-                type = IPCP_UDP6;
         else if (strcmp(ipcp_type, LOCAL) == 0)
                 type = IPCP_LOCAL;
-        else if (strcmp(ipcp_type, ETH_LLC) == 0)
-                type = IPCP_ETH_LLC;
-        else if (strcmp(ipcp_type, ETH_DIX) == 0)
-                type = IPCP_ETH_DIX;
         else {
                 printf("IPCP type \"%s\" is unknown.\n", ipcp_type);
                 usage();

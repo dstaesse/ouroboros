@@ -746,7 +746,7 @@ static int test_reg_direct_flow_success(void)
         reg_dealloc_flow(&info);
 
         if (info.state != FLOW_DEALLOC_PENDING) {
-                printf("Same endpoint dealloc changed state.\n");
+                printf("Same PoA dealloc changed state.\n");
                 goto fail;
         }
 

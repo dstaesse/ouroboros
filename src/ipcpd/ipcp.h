@@ -36,15 +36,18 @@
 
 #define ipcp_dir_hash_strlen() (ipcp_dir_hash_len() * 2)
 
+/* Attach or release one flow PoA on a unicast or broadcast IPCP. */
 struct ipcp_ops {
         int   (* ipcp_bootstrap)(struct ipcp_config * conf);
 
-        int   (* ipcp_enroll)(const char *        dst,
-                              struct layer_info * info);
+        int   (* ipcp_enroll)(const char *            dst,
+                              const struct poa_addr * addr,
+                              struct layer_info *     info);
 
-        int   (* ipcp_connect)(const char * dst,
-                               const char * component,
-                               qosspec_t    qs);
+        int   (* ipcp_connect)(const char *            dst,
+                               const char *            component,
+                               qosspec_t               qs,
+                               const struct poa_addr * addr);
 
         int   (* ipcp_disconnect)(const char * dst,
                                   const char * component);

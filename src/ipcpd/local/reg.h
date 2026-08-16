@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2026
  *
- * IPC process over UDP/IPv6
+ * Names registered with the local IPCP
  *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
@@ -20,23 +20,26 @@
  * Foundation, Inc., http://www.fsf.org/about/contact/.
  */
 
-#if defined(__linux__) || defined(__CYGWIN__)
-#define _DEFAULT_SOURCE
-#else
-#define _POSIX_C_SOURCE 200112L
-#endif
+#ifndef OUROBOROS_IPCPD_LOCAL_REG_H
+#define OUROBOROS_IPCPD_LOCAL_REG_H
 
-#include <ouroboros/ipcp-dev.h>
+#include <stdbool.h>
+#include <stdint.h>
 
-#define BUILD_IPCP_UDP6
-#define THIS_TYPE               IPCP_UDP6
-#define TYPE_STR                "IPCP over UDP/IPv6"
-#define OUROBOROS_PREFIX        "ipcpd/udp6"
-#define IPCP_UDP_MAX_PACKET_SIZE 8952
-#define __AF                    AF_INET6
-#define __ADDRSTRLEN            INET6_ADDRSTRLEN
-#define __SOCKADDR              sockaddr_in6
-#define __ADDR                  in6_addr
-#define __ADDR_ANY_INIT         IN6ADDR_ANY_INIT
+/* The hashes of the names registered with this IPCP. */
+struct reg;
 
-#include "udp.c"
+struct reg * reg_create(void);
+
+void         reg_destroy(struct reg * reg);
+
+int          reg_add(struct reg *    reg,
+                     const uint8_t * hash);
+
+int          reg_del(struct reg *    reg,
+                     const uint8_t * hash);
+
+bool         reg_has(struct reg *    reg,
+                     const uint8_t * hash);
+
+#endif /* OUROBOROS_IPCPD_LOCAL_REG_H */

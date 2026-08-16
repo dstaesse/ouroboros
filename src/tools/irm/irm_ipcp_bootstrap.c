@@ -53,10 +53,6 @@
 
 #define UNICAST        "unicast"
 #define BROADCAST      "broadcast"
-#define IP_UDP4        "udp4"
-#define IP_UDP6        "udp6"
-#define ETH_LLC        "eth-llc"
-#define ETH_DIX        "eth-dix"
 #define LOCAL          "local"
 
 #define MD5            "MD5"
@@ -76,18 +72,13 @@
 #define DT(x)  default_dt_config.x
 #define DHT(x) default_dht_config.params.x
 #define UNI(x) default_uni_config.x
-#define DIX(x) eth_dix_default_conf.eth.x
-#define LLC(x) eth_llc_default_conf.eth.x
-#define UD4(x) udp4_default_conf.udp4.x
-#define UD6(x) udp6_default_conf.udp6.x
 
 static char * usage_str = \
         "Usage: irm ipcp bootstrap\n"
         "           name <ipcp name>\n"
         "           layer <layer name>\n"
         "           [type [TYPE]]\n"
-        "where TYPE in {" UNICAST " " BROADCAST " " LOCAL " "
-        IP_UDP4 " " IP_UDP6 " " ETH_LLC " " ETH_DIX "},\n\n"
+        "where TYPE in {" UNICAST " " BROADCAST " " LOCAL "},\n\n"
         "if TYPE == " UNICAST "\n"
         "        [addr_auth <ADDRESS_POLICY> (default: %s)]\n"
         "        [directory <DIRECTORY_POLICY> (default: %s)]\n"
@@ -117,28 +108,6 @@ static char * usage_str = \
         "        [ls_t_recalc <pff recalc interval (s)> (default: %ld)]\n"
         "        [ls_t_update <LSA update interval (s)> (default: %ld)]\n"
         "        [ls_t_timeo  <link timeout (s)> (default: %ld)]\n\n"
-        "if TYPE == " IP_UDP4 "\n"
-        "        ip <IP address in dotted notation>\n"
-        "        [port <UDP port> (default: %d)]\n"
-        "        [dns <DDNS IPv4 address in dotted notation>"
-        " (default: none)]\n\n"
-        "if TYPE == " IP_UDP6 "\n"
-        "        ip <IPv6 address>\n"
-        "        [port <UDP port> (default: %d)]\n"
-        "        [dns <DDNS IPv6 address>"
-        " (default: none)]\n\n"
-
-        "if TYPE == " ETH_LLC "\n"
-        "        dev <interface name>\n"
-        "        [hash [ALGORITHM] (default: %s)]\n"
-        "where ALGORITHM in {" SHA3_224 " " SHA3_256 " "
-        SHA3_384 " " SHA3_512 "}\n\n"
-        "if TYPE == " ETH_DIX "\n"
-        "        dev <interface name>\n"
-        "        [ethertype <ethertype> (default: 0x%4X)]\n"
-        "        [hash [ALGORITHM] (default: %s)]\n"
-        "where ALGORITHM in {" SHA3_224 " " SHA3_256 " "
-        SHA3_384 " " SHA3_512 "}\n\n"
         "if TYPE == " LOCAL "\n"
         "        [hash [ALGORITHM] (default: %s)]\n"
         "where ALGORITHM in {" SHA3_224 " " SHA3_256 " "
@@ -160,15 +129,6 @@ static void usage(void)
                /* ls */
                default_ls_config.t_recalc, default_ls_config.t_update,
                default_ls_config.t_timeo,
-               /* udp4 */
-               UD4(port),
-               /* udp6 */
-               UD6(port),
-               /* eth_llc */
-               SHA3_256,
-               /* eth_dix */
-               DIX(ethertype),
-               SHA3_256,
                /* local */
                SHA3_256,
                /* broadcast */
@@ -190,19 +150,9 @@ int do_bootstrap_ipcp(int     argc,
         enum pol_addr_auth      addr_auth_type = UNI(addr_auth_type);
         enum pol_cong_avoid     cong_avoid     = UNI(cong_avoid);
         enum pol_dir_hash       hash_algo      = DIR_HASH_SHA3_256;
-        char *                  ipstr          = NULL;
-        char *                  dnsstr         = NULL;
-        struct in_addr          ip4_addr       = {.s_addr = INADDR_ANY};
-        struct in_addr          dns4_addr      = UD4(dns_addr);
-        int                     port4          = UD4(port);
-        struct in6_addr         ip6_addr       = IN6ADDR_ANY_INIT;
-        struct in6_addr         dns6_addr      = UD6(dns_addr);
-        int                     port6          = UD6(port);
         char *                  ipcp_type      = NULL;
         enum ipcp_type          type           = IPCP_INVALID;
         char *                  layer          = NULL;
-        char *                  dev            = NULL;
-        uint16_t                ethertype      = DIX(ethertype);
         struct ipcp_list_info * ipcps;
         ssize_t                 len            = 0;
         int                     i              = 0;
@@ -211,6 +161,14 @@ int do_bootstrap_ipcp(int     argc,
 
         while (argc > 0) {
                 cargs = 2;
+                if (matches(*argv, "autobind") == 0)
+                        cargs = 1;
+
+                if (argc < cargs) {
+                        usage();
+                        return -1;
+                }
+
                 if (matches(*argv, "type") == 0) {
                         ipcp_type = *(argv + 1);
                 } else if (matches(*argv, "layer") == 0) {
@@ -228,24 +186,6 @@ int do_bootstrap_ipcp(int     argc,
                                 hash_algo = DIR_HASH_SHA3_512;
                         else
                                 goto unknown_param;
-                } else if (matches(*argv, "ip") == 0) {
-                        ipstr = *(argv + 1);
-                } else if (matches(*argv, "dns") == 0) {
-                        dnsstr = *(argv + 1);
-                } else if (matches(*argv, "device") == 0) {
-                        dev = *(argv + 1);
-                } else if (matches(*argv, "ethertype") == 0) {
-                        /* NOTE: We might do some more checks on strtol. */
-                        if (matches(*(argv + 1), "0x") == 0)
-                                ethertype = strtol(*(argv + 1), NULL, 0);
-                        else
-                                ethertype = strtol(*(argv + 1), NULL, 16);
-                        if (ethertype < 0x0600 || ethertype >= 0xFFFF) {
-                                printf("Invalid Ethertype: \"%s\".\n"
-                                       "Recommended range: 0xA000-0xEFFF.\n",
-                                       *(argv + 1));
-                                return -1;
-                        }
                 } else if (matches(*argv, "addr") == 0) {
                         addr_size = atoi(*(argv + 1));
                 } else if (matches(*argv, "eid") == 0) {
@@ -254,9 +194,6 @@ int do_bootstrap_ipcp(int     argc,
                         max_ttl = atoi(*(argv + 1));
                 } else if (matches(*argv, "rtt") == 0) {
                         max_rtt = atoi(*(argv + 1));
-                } else if (matches(*argv, "port") == 0) {
-                        port4 = atoi(*(argv + 1));
-                        port6 = port4;
                 } else if (matches(*argv, "autobind") == 0) {
                         autobind = true;
                         cargs = 1;
@@ -334,53 +271,9 @@ int do_bootstrap_ipcp(int     argc,
                         type = IPCP_UNICAST;
                 else if (matches(ipcp_type, BROADCAST) == 0)
                         type = IPCP_BROADCAST;
-                else if (matches(ipcp_type, IP_UDP4) == 0)
-                        type = IPCP_UDP4;
-                else if (matches(ipcp_type, IP_UDP6) == 0)
-                        type = IPCP_UDP6;
-                else if (matches(ipcp_type, ETH_DIX) == 0)
-                        type = IPCP_ETH_DIX;
-                else if (matches(ipcp_type, ETH_LLC) == 0)
-                        type = IPCP_ETH_LLC;
                 else if (matches(ipcp_type, LOCAL) == 0)
                         type = IPCP_LOCAL;
                 else goto fail_usage;
-        }
-
-        if (type == IPCP_UDP4) {
-                if (inet_pton (AF_INET, ipstr, &ip4_addr) != 1) {
-                        printf("Invalid IPv4 address: \"%s\".\n", ipstr);
-                        goto fail_usage;
-                }
-
-                if (ip4_addr.s_addr == INADDR_ANY) {
-                        printf("Cannot use IPv4 address: \"%s\".\n", ipstr);
-                        goto fail_usage;
-                }
-
-                if (dnsstr != NULL &&
-                    inet_pton(AF_INET, dnsstr, &dns4_addr) != 1) {
-                        printf("Invalid DNS IPv4 address: \"%s\".\n", dnsstr);
-                        goto fail_usage;
-                }
-        }
-
-        if (type == IPCP_UDP6) {
-                if (inet_pton(AF_INET6, ipstr, &ip6_addr) != 1) {
-                        printf("Invalid IPv6 address: \"%s\".\n", ipstr);
-                        goto fail_usage;
-                }
-
-                if (IN6_IS_ADDR_UNSPECIFIED(&ip6_addr)) {
-                        printf("Cannot use IPv6 address: \"%s\".\n", ipstr);
-                        goto fail_usage;
-                }
-
-                if (dnsstr != NULL &&
-                    inet_pton(AF_INET6, dnsstr, &dns6_addr) != 1) {
-                        printf("Invalid DNS IPv6 address: \"%s\".\n", dnsstr);
-                        goto fail_usage;
-                }
         }
 
         if (pid == -1) {
@@ -431,29 +324,6 @@ int do_bootstrap_ipcp(int     argc,
                                 conf.unicast.addr_auth_type  = addr_auth_type;
                                 conf.unicast.cong_avoid      = cong_avoid;
                                 conf.unicast.dir             = dir_config;
-                                break;
-                        case IPCP_UDP4:
-                                conf.udp4.ip_addr  = ip4_addr;
-                                conf.udp4.dns_addr = dns4_addr;
-                                conf.udp4.port     = port4;
-                                break;
-                        case IPCP_UDP6:
-                                conf.udp6.ip_addr  = ip6_addr;
-                                conf.udp6.dns_addr = dns6_addr;
-                                conf.udp6.port     = port6;
-                                break;
-                        case IPCP_ETH_DIX:
-                                conf.eth.ethertype = ethertype;
-                                /* FALLTHRU */
-                        case IPCP_ETH_LLC:
-                                if (dev == NULL)
-                                        goto fail_usage;
-                                if (strlen(dev) > DEV_NAME_SIZE) {
-                                        printf("Device name too long.\n\n");
-                                        goto fail_usage;
-                                }
-
-                                strcpy(conf.eth.dev, dev);
                                 break;
                         case IPCP_BROADCAST:
                                 /* FALLTHRU */
