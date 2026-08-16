@@ -36,6 +36,7 @@
 
 /* Mirrors TXQ_MIN_SLOTS in ssm/rbuff.c; keep in sync. */
 #define FLOOR_SLOTS 4
+#define CEIL_SLOTS  (SSM_RBUFF_SIZE - 1 - SSM_RBUFF_TXQ_RESERVE)
 
 #include <errno.h>
 #include <stdio.h>
@@ -57,6 +58,7 @@ static int test_ssm_rbuff_create_destroy(void)
         ssm_rbuff_destroy(rb);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail:
@@ -103,6 +105,7 @@ static int test_ssm_rbuff_write_read(void)
         ssm_rbuff_destroy(rb);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_rb:
@@ -134,6 +137,7 @@ static int test_ssm_rbuff_read_empty(void)
         ssm_rbuff_destroy(rb);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_rb:
@@ -163,6 +167,7 @@ static int test_ssm_rbuff_fill_drain(void)
                                i, ssm_rbuff_queued(rb));
                         goto fail_rb;
                 }
+
                 if (ssm_rbuff_write(rb, i) < 0) {
                         printf("Failed to write at index %zu.\n", i);
                         goto fail_rb;
@@ -198,11 +203,13 @@ static int test_ssm_rbuff_fill_drain(void)
         ssm_rbuff_destroy(rb);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_rb:
         while (ssm_rbuff_read(rb) >= 0)
                 ;
+
         ssm_rbuff_destroy(rb);
  fail:
         TEST_FAIL();
@@ -228,7 +235,8 @@ static int test_ssm_rbuff_flags(void)
                 goto fail_rb;
         }
 
-        ssm_rbuff_clr_bits(rb, RB_WR);
+        ssm_rbuff_clr_flags(rb, RB_WR);
+
         flags = ssm_rbuff_get_flags(rb);
         if (flags != RB_RD) {
                 printf("Expected RB_RD, got %u.\n", flags);
@@ -240,7 +248,8 @@ static int test_ssm_rbuff_flags(void)
                 goto fail_rb;
         }
 
-        ssm_rbuff_set_bits(rb, RB_FLOWDOWN);
+        ssm_rbuff_set_flags(rb, RB_FLOWDOWN);
+
         if (ssm_rbuff_write(rb, 1) != -EFLOWDOWN) {
                 printf("Expected -EFLOWDOWN on FLOWDOWN.\n");
                 goto fail_rb;
@@ -254,6 +263,7 @@ static int test_ssm_rbuff_flags(void)
         ssm_rbuff_destroy(rb);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_rb:
@@ -305,6 +315,7 @@ static int test_ssm_rbuff_open_close(void)
         ssm_rbuff_destroy(rb1);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_rb2:
@@ -351,8 +362,10 @@ static void * reader_thread(void * arg)
                 val = ssm_rbuff_read(args->rb);
                 while (val < 0) {
                         nanosleep(&delay, NULL);
+
                         val = ssm_rbuff_read(args->rb);
                 }
+
                 if (val != i) {
                         printf("Expected %d, got %zd.\n", i, val);
                         return (void *) -1;
@@ -362,7 +375,7 @@ static void * reader_thread(void * arg)
         return NULL;
 }
 
-static void * blocking_writer_thread(void * arg)
+static void * blocking_wr_thread(void * arg)
 {
         struct thread_args * args = (struct thread_args *) arg;
         int                  i;
@@ -375,7 +388,7 @@ static void * blocking_writer_thread(void * arg)
         return NULL;
 }
 
-static void * blocking_reader_thread(void * arg)
+static void * blocking_rd_thread(void * arg)
 {
         struct thread_args * args = (struct thread_args *) arg;
         int                  i;
@@ -394,13 +407,13 @@ static void * blocking_reader_thread(void * arg)
 
 static int test_ssm_rbuff_blocking(void)
 {
-        struct ssm_rbuff *   rb;
-        pthread_t            wthread;
-        pthread_t            rthread;
-        struct thread_args   args;
-        struct timespec      delay = {0, 10 * MILLION};
-        void *               ret_w;
-        void *               ret_r;
+        struct ssm_rbuff * rb;
+        pthread_t          wthread;
+        pthread_t          rthread;
+        struct thread_args args;
+        struct timespec    delay = {0, 10 * MILLION};
+        void *             ret_w;
+        void *             ret_r;
 
         TEST_START();
 
@@ -413,15 +426,14 @@ static int test_ssm_rbuff_blocking(void)
         args.rb = rb;
         args.iterations = 50;
         args.delay_us = 0;
-
-        if (pthread_create(&rthread, NULL, blocking_reader_thread, &args)) {
+        if (pthread_create(&rthread, NULL, blocking_rd_thread, &args) != 0) {
                 printf("Failed to create reader thread.\n");
                 goto fail_rthread;
         }
 
         nanosleep(&delay, NULL);
 
-        if (pthread_create(&wthread, NULL, blocking_writer_thread, &args)) {
+        if (pthread_create(&wthread, NULL, blocking_wr_thread, &args) != 0) {
                 printf("Failed to create writer thread.\n");
                 pthread_cancel(rthread);
                 goto fail_wthread;
@@ -438,6 +450,7 @@ static int test_ssm_rbuff_blocking(void)
         ssm_rbuff_destroy(rb);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_ret:
@@ -485,8 +498,7 @@ static int test_ssm_rbuff_blocking_timeout(void)
                      (end.tv_nsec - start.tv_nsec) / 1000000L;
 
         if (elapsed_ms < 90 || elapsed_ms > 200) {
-                printf("Timeout took %ld ms, expected ~100 ms.\n",
-                       elapsed_ms);
+                printf("Timeout took %ld ms, expected ~100 ms.\n", elapsed_ms);
                 goto fail_rb;
         }
 
@@ -505,8 +517,7 @@ static int test_ssm_rbuff_blocking_timeout(void)
         clock_gettime(PTHREAD_COND_CLOCK, &end);
 
         if (ret != -ETIMEDOUT) {
-                printf("Expected -ETIMEDOUT on full buffer, got %zd.\n",
-                       ret);
+                printf("Expected -ETIMEDOUT on full buffer, got %zd.\n", ret);
                 goto fail_rb;
         }
 
@@ -525,11 +536,13 @@ static int test_ssm_rbuff_blocking_timeout(void)
         ssm_rbuff_destroy(rb);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_rb:
         while (ssm_rbuff_read(rb) >= 0)
                 ;
+
         ssm_rbuff_destroy(rb);
  fail:
         TEST_FAIL();
@@ -556,7 +569,7 @@ static int test_ssm_rbuff_blocking_flowdown(void)
         clock_gettime(PTHREAD_COND_CLOCK, &now);
         ts_add(&now, &interval, &abs_timeout);
 
-        ssm_rbuff_set_bits(rb, RB_FLOWDOWN);
+        ssm_rbuff_set_flags(rb, RB_FLOWDOWN);
 
         ret = ssm_rbuff_read_b(rb, &abs_timeout);
         if (ret != -EFLOWDOWN) {
@@ -564,7 +577,7 @@ static int test_ssm_rbuff_blocking_flowdown(void)
                 goto fail_rb;
         }
 
-        ssm_rbuff_clr_bits(rb, RB_FLOWDOWN);
+        ssm_rbuff_clr_flags(rb, RB_FLOWDOWN);
 
         for (i = 0; i < SSM_RBUFF_SIZE - 1; ++i) {
                 if (ssm_rbuff_write(rb, i) < 0) {
@@ -576,7 +589,7 @@ static int test_ssm_rbuff_blocking_flowdown(void)
         clock_gettime(PTHREAD_COND_CLOCK, &now);
         ts_add(&now, &interval, &abs_timeout);
 
-        ssm_rbuff_set_bits(rb, RB_FLOWDOWN);
+        ssm_rbuff_set_flags(rb, RB_FLOWDOWN);
 
         ret = ssm_rbuff_write_b(rb, 999, &abs_timeout);
         if (ret != -EFLOWDOWN) {
@@ -584,18 +597,21 @@ static int test_ssm_rbuff_blocking_flowdown(void)
                 goto fail_rb;
         }
 
-        ssm_rbuff_clr_bits(rb, RB_FLOWDOWN);
+        ssm_rbuff_clr_flags(rb, RB_FLOWDOWN);
+
         while (ssm_rbuff_read(rb) >= 0)
                 ;
 
         ssm_rbuff_destroy(rb);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_rb:
         while (ssm_rbuff_read(rb) >= 0)
                 ;
+
         ssm_rbuff_destroy(rb);
  fail:
         TEST_FAIL();
@@ -604,12 +620,12 @@ static int test_ssm_rbuff_blocking_flowdown(void)
 
 static int test_ssm_rbuff_threaded(void)
 {
-        struct ssm_rbuff *   rb;
-        pthread_t            wthread;
-        pthread_t            rthread;
-        struct thread_args   args;
-        void *               ret_w;
-        void *               ret_r;
+        struct ssm_rbuff * rb;
+        pthread_t          wthread;
+        pthread_t          rthread;
+        struct thread_args args;
+        void *             ret_w;
+        void *             ret_r;
 
         TEST_START();
 
@@ -622,13 +638,12 @@ static int test_ssm_rbuff_threaded(void)
         args.rb = rb;
         args.iterations = 100;
         args.delay_us = 100;
-
-        if (pthread_create(&wthread, NULL, writer_thread, &args)) {
+        if (pthread_create(&wthread, NULL, writer_thread, &args) != 0) {
                 printf("Failed to create writer thread.\n");
                 goto fail_rb;
         }
 
-        if (pthread_create(&rthread, NULL, reader_thread, &args)) {
+        if (pthread_create(&rthread, NULL, reader_thread, &args) != 0) {
                 printf("Failed to create reader thread.\n");
                 pthread_cancel(wthread);
                 pthread_join(wthread, NULL);
@@ -646,6 +661,7 @@ static int test_ssm_rbuff_threaded(void)
         ssm_rbuff_destroy(rb);
 
         TEST_SUCCESS();
+
         return TEST_RC_SUCCESS;
 
  fail_rb:
@@ -708,7 +724,7 @@ static int test_ssm_rbuff_limit_off(void)
 static int test_ssm_rbuff_limit_slow(void)
 {
         struct ssm_rbuff * rb;
-        struct timespec    dfl = {0, SSM_RBUFF_TXQ_DELAY * MILLION};
+        struct timespec    dfl = TIMESPEC_INIT_MS(SSM_RBUFF_TXQ_DELAY);
         struct timespec    delay = {0, 10 * MILLION};
         size_t             limit;
         size_t             i;
@@ -761,7 +777,7 @@ static int test_ssm_rbuff_limit_slow(void)
 static int test_ssm_rbuff_limit_fast(void)
 {
         struct ssm_rbuff * rb;
-        struct timespec    dfl = {0, SSM_RBUFF_TXQ_DELAY * MILLION};
+        struct timespec    dfl = TIMESPEC_INIT_MS(SSM_RBUFF_TXQ_DELAY);
         size_t             limit;
         size_t             i;
 
@@ -788,9 +804,8 @@ static int test_ssm_rbuff_limit_fast(void)
         }
 
         limit = ssm_rbuff_get_limit(rb);
-        if (limit != SSM_RBUFF_SIZE - 1) {
-                printf("Expected limit %d, got %zu.\n",
-                       SSM_RBUFF_SIZE - 1, limit);
+        if (limit != CEIL_SLOTS) {
+                printf("Expected limit %d, got %zu.\n", CEIL_SLOTS, limit);
                 goto fail_rb;
         }
 
@@ -813,7 +828,7 @@ static int test_ssm_rbuff_limit_fast(void)
 static int test_ssm_rbuff_limit_floor(void)
 {
         struct ssm_rbuff * rb;
-        struct timespec    dfl = {0, SSM_RBUFF_TXQ_DELAY * MILLION};
+        struct timespec    dfl = TIMESPEC_INIT_MS(SSM_RBUFF_TXQ_DELAY);
         struct timespec    interval = {0, 50 * MILLION};
         struct timespec    now;
         struct timespec    abs_timeout;
@@ -875,10 +890,11 @@ static int test_ssm_rbuff_limit_floor(void)
         return TEST_RC_FAIL;
 }
 
+/* A fresh ring is unlimited; rx rings must not inherit a bound. */
 static int test_ssm_rbuff_txq_target(void)
 {
         struct ssm_rbuff * rb;
-        struct timespec    dfl = {0, SSM_RBUFF_TXQ_DELAY * MILLION};
+        struct timespec    dfl = TIMESPEC_INIT_MS(SSM_RBUFF_TXQ_DELAY);
         struct timespec    delay = {0, 5 * MILLION};
         struct timespec    small = {0, 2 * MILLION};
         struct timespec    big   = {0, 200 * MILLION};
@@ -896,8 +912,8 @@ static int test_ssm_rbuff_txq_target(void)
                 goto fail;
         }
 
-        /* A fresh ring is unlimited; rx rings must not inherit a bound. */
         ssm_rbuff_get_txq_target(rb, &got);
+
         if (got.tv_sec != 0 || got.tv_nsec != 0) {
                 printf("A new ring is not unlimited.\n");
                 goto fail_rb;
@@ -969,10 +985,11 @@ static int test_ssm_rbuff_txq_target(void)
         return TEST_RC_FAIL;
 }
 
+/* Ages the seed sample past the estimator's dt floor at write 16. */
 static int test_ssm_rbuff_write_over_limit(void)
 {
         struct ssm_rbuff * rb;
-        struct timespec    dfl = {0, SSM_RBUFF_TXQ_DELAY * MILLION};
+        struct timespec    dfl = TIMESPEC_INIT_MS(SSM_RBUFF_TXQ_DELAY);
         struct timespec    age = {0, 20 * 1000};
         size_t             count;
         int                ret = 0;
@@ -997,7 +1014,6 @@ static int test_ssm_rbuff_write_over_limit(void)
                         goto fail_rb;
                 }
 
-                /* Age the seed sample past the estimator's dt floor. */
                 if (count == 16)
                         nanosleep(&age, NULL);
         }

@@ -80,7 +80,8 @@ buffer. Takes a \fBsize_t \fIqlen\fR * as third argument.
 occupancy limiter. Takes a \fBstruct timespec * \fItimeo\fR as third
 argument. A zero delay leaves the ring unlimited, bounded only by its
 slot count. The build-time default is applied when the flow is
-created.
+created. The delay must be a normalised, non-negative timespec no
+longer than the maximum the limiter accepts.
 
 \fBFLOWGTXQDLY\fR   - retrieve the current target queueing delay for
 the transmit occupancy limiter. Takes a \fBstruct timespec * \fItimeo\fR
@@ -111,7 +112,9 @@ On success, \fBfccntl\fR() returns 0.
 \fBfccntl\fR() can return
 
 .B -EINVAL
-An invalid argument was passed.
+An invalid argument was passed. This is also returned when the delay
+passed to FLOWSTXQDLY is negative, is not normalised, or exceeds the
+maximum the transmit occupancy limiter accepts.
 
 .B -EPERM
 Operation not permitted. This is returned when requesting the value of

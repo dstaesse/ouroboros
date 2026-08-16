@@ -26,7 +26,7 @@
 #include <ouroboros/qos.h>
 #include <ouroboros/utils.h>
 
-int  fa_init(void);
+int  fa_init(uint16_t max_rtt);
 
 void fa_fini(void);
 

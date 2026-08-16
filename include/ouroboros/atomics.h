@@ -35,5 +35,7 @@
 #define FETCH_SUB_RELAXED(p, v) (__atomic_fetch_sub(p, v, __ATOMIC_RELAXED))
 #define FETCH_ADD(p, v)         (__atomic_fetch_add(p, v, __ATOMIC_SEQ_CST))
 #define FETCH_SUB(p, v)         (__atomic_fetch_sub(p, v, __ATOMIC_SEQ_CST))
+#define FETCH_OR(p, v)          (__atomic_fetch_or(p, v, __ATOMIC_SEQ_CST))
+#define FETCH_AND(p, v)         (__atomic_fetch_and(p, v, __ATOMIC_SEQ_CST))
 
 #endif /* OUROBOROS_LIB_ATOMICS_H */

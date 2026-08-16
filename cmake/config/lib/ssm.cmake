@@ -22,6 +22,10 @@ set(SSM_RBUFF_SIZE 1024 CACHE STRING
     "Number of slots in a flow's rbuff ring; must be a power of 2")
 set(SSM_RBUFF_TXQ_DELAY 10 CACHE STRING
     "Queueing delay a flow's tx ring may hold (ms); 0 is unlimited")
+set(SSM_RBUFF_TXQ_PRIO_MUL 2 CACHE STRING
+    "Retransmissions get this multiple of the tx occupancy limit")
+set(SSM_RBUFF_TXQ_PRIO_DIV 16 CACHE STRING
+    "Ring fraction (1/N) new data leaves to retransmissions")
 set(SSM_RBUFF_PREFIX "/${SHM_PREFIX}.rbuff." CACHE INTERNAL
     "Prefix for rbuff POSIX shared memory filenames")
 set(SSM_FLOW_SET_PREFIX "/${SHM_PREFIX}.set." CACHE INTERNAL
@@ -147,6 +151,46 @@ message(STATUS "    Blocks: ${SSM_PUP_256_BLOCKS}, ${SSM_PUP_512_BLOCKS}, "
     "${SSM_PUP_1K_BLOCKS}, ${SSM_PUP_2K_BLOCKS}, ${SSM_PUP_4K_BLOCKS}, "
     "${SSM_PUP_16K_BLOCKS}, ${SSM_PUP_64K_BLOCKS}, ${SSM_PUP_256K_BLOCKS}, "
     "${SSM_PUP_1M_BLOCKS}")
+
+math(EXPR SSM_RBUFF_TXQ_RESERVE
+    "${SSM_RBUFF_SIZE} / ${SSM_RBUFF_TXQ_PRIO_DIV}")
+
+set(SSM_RBUFF_TXQ_RESERVE ${SSM_RBUFF_TXQ_RESERVE} CACHE INTERNAL
+    "Top-of-ring slots new data may not use")
+
+math(EXPR SSM_RBUFF_TXQ_DATA_MAX
+    "${SSM_RBUFF_SIZE} - 1 - ${SSM_RBUFF_TXQ_RESERVE}")
+
+# The limiter asserts its target fits SSM_RBUFF_TXQ_MAX_DELAY (1 s).
+if(SSM_RBUFF_TXQ_DELAY LESS 0 OR SSM_RBUFF_TXQ_DELAY GREATER 1000)
+    message(FATAL_ERROR
+        "SSM_RBUFF_TXQ_DELAY (${SSM_RBUFF_TXQ_DELAY}) must be in "
+        "[0, 1000] ms; a longer target trips the limiter's own bound.")
+endif()
+
+# What the reserve leaves new data must still clear the 4-slot floor.
+if(SSM_RBUFF_TXQ_DATA_MAX LESS 4)
+    message(FATAL_ERROR
+        "SSM_RBUFF_TXQ_PRIO_DIV (${SSM_RBUFF_TXQ_PRIO_DIV}) leaves new "
+        "data ${SSM_RBUFF_TXQ_DATA_MAX} of ${SSM_RBUFF_SIZE} slots, "
+        "below the 4-slot floor: every write would be refused.")
+endif()
+
+# Both bounds keep the retransmission headroom above zero: the divisor
+# reserves it at saturation, the multiplier below it.
+if(SSM_RBUFF_TXQ_PRIO_DIV LESS 2 OR SSM_RBUFF_TXQ_RESERVE LESS 1)
+    message(FATAL_ERROR
+        "SSM_RBUFF_TXQ_PRIO_DIV (${SSM_RBUFF_TXQ_PRIO_DIV}) must be in "
+        "[2, SSM_RBUFF_SIZE (${SSM_RBUFF_SIZE})]: it reserves "
+        "${SSM_RBUFF_TXQ_RESERVE} of ${SSM_RBUFF_SIZE} slots for "
+        "retransmissions.")
+endif()
+
+if(SSM_RBUFF_TXQ_PRIO_MUL LESS 2)
+    message(FATAL_ERROR
+        "SSM_RBUFF_TXQ_PRIO_MUL (${SSM_RBUFF_TXQ_PRIO_MUL}) must be >= 2: "
+        "at 1 a retransmission gets the ceiling new data already has.")
+endif()
 
 # FRCT reorder queue must fit in every enabled size class. If RQ_SIZE >= any backing pool, the
 # receiver advertises a window the pool cannot back; np1_flow_write fails under load and a single

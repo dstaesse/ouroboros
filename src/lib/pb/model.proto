@@ -42,6 +42,7 @@ message flow_info_msg {
         required qosspec_msg qos        = 6;
         required uint32      uid        = 7;
         required uint32      mtu        = 8; /* Layer MTU (bytes).       */
+        required uint32      max_rtt    = 9; /* Max path RTT (ms).       */
 }
 
 message name_info_msg {

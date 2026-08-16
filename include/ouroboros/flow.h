@@ -53,6 +53,8 @@ struct flow_info {
 
         uint32_t        mtu;   /* n-1 layer MTU in bytes, 0 = unknown */
 
+        uint32_t        max_rtt; /* declared max path RTT (ms), 0 = unknown */
+
         struct qos_spec qs;
 
         enum flow_state state;

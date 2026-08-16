@@ -35,6 +35,8 @@
 #define RB_FLOWPEER 0010
 #define RB_REKEY    0020 /* re-key seed parked (out-of-band signal) */
 
+#define SSM_RBUFF_TXQ_MAX_DELAY 1000000000LL
+
 struct ssm_rbuff;
 
 struct ssm_rbuff * ssm_rbuff_create(pid_t pid,
@@ -47,11 +49,11 @@ struct ssm_rbuff * ssm_rbuff_open(pid_t pid,
 
 void               ssm_rbuff_close(struct ssm_rbuff * rb);
 
-void               ssm_rbuff_set_bits(struct ssm_rbuff * rb,
-                                      uint32_t           bits);
+void               ssm_rbuff_set_flags(struct ssm_rbuff * rb,
+                                       uint32_t           flags);
 
-void               ssm_rbuff_clr_bits(struct ssm_rbuff * rb,
-                                      uint32_t           bits);
+void               ssm_rbuff_clr_flags(struct ssm_rbuff * rb,
+                                       uint32_t           flags);
 
 uint32_t           ssm_rbuff_get_flags(struct ssm_rbuff * rb);
 

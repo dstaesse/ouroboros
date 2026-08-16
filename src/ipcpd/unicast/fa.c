@@ -891,10 +891,12 @@ static void * fa_handle_packet(void * o)
         return (void *) 0;
 }
 
-int fa_init(void)
+int fa_init(uint16_t max_rtt)
 {
         pthread_condattr_t cattr;
         size_t             i;
+
+        ipcp_flow_set_max_rtt(max_rtt);
 
         if (pthread_rwlock_init(&fa.flows_lock, NULL) != 0)
                 goto fail_rwlock;

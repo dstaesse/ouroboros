@@ -39,6 +39,8 @@
 #define SSM_FLOW_SET_PREFIX      "@SSM_FLOW_SET_PREFIX@"
 #define SSM_POOL_NAME            "@SSM_POOL_NAME@"
 #define SSM_RBUFF_SIZE            @SSM_RBUFF_SIZE@
+#define SSM_RBUFF_TXQ_PRIO_MUL    @SSM_RBUFF_TXQ_PRIO_MUL@
+#define SSM_RBUFF_TXQ_RESERVE     @SSM_RBUFF_TXQ_RESERVE@
 
 /* Packet buffer space reservation */
 #define SSM_PK_BUFF_HEADSPACE     @SSM_PK_BUFF_HEADSPACE@

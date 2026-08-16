@@ -1501,11 +1501,11 @@ static size_t flows_updown(struct poa * poa,
                 if (up) {
                         flow->oflags &= ~FLOWFDOWN;
 
-                        ssm_rbuff_clr_bits(flow->rx_rb, RB_FLOWDOWN);
+                        ssm_rbuff_clr_flags(flow->rx_rb, RB_FLOWDOWN);
                 } else {
                         flow->oflags |= FLOWFDOWN;
 
-                        ssm_rbuff_set_bits(flow->rx_rb, RB_FLOWDOWN);
+                        ssm_rbuff_set_flags(flow->rx_rb, RB_FLOWDOWN);
                 }
 
                 ssm_flow_set_notify(proc.fqset, pf->flow_id,

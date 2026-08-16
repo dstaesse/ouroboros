@@ -156,6 +156,8 @@ struct {
         struct flow *         flows;
         struct fmap *         id_to_fd;
 
+        uint32_t              max_rtt; /* IPCPs: declared layer RTT (ms) */
+
         pthread_mutex_t       mtx;
         pthread_cond_t        cond;
 
@@ -284,7 +286,7 @@ static int spb_encrypt(struct flow *        flow,
         in.len  = ssm_pk_buff_len(spb);
 
         if (crypt_encrypt(flow->crypt, in, &out) < 0)
-                goto fail_encrypt;
+                return -ECRYPT;
 
         head = ssm_pk_buff_push(spb, flow->headsz);
         if (head == NULL)
@@ -301,7 +303,7 @@ static int spb_encrypt(struct flow *        flow,
         return 0;
  fail_alloc:
         freebuf(out);
- fail_encrypt:
+
         return -ECRYPT;
 }
 
@@ -703,10 +705,10 @@ static void flow_quiesce(int fd)
         struct ssm_rbuff * tx_rb = proc.flows[fd].tx_rb;
 
         if (rx_rb != NULL)
-                ssm_rbuff_set_bits(rx_rb, RB_FLOWDOWN);
+                ssm_rbuff_set_flags(rx_rb, RB_FLOWDOWN);
 
         if (tx_rb != NULL)
-                ssm_rbuff_set_bits(tx_rb, RB_FLOWDOWN);
+                ssm_rbuff_set_flags(tx_rb, RB_FLOWDOWN);
 }
 
 static void do_flow_fini(int fd)
@@ -778,11 +780,15 @@ static int flow_init(struct flow_info * info,
                      time_t             rtt_hint,
                      struct poa_flow *  pf)
 {
-        struct timespec now;
-        struct timespec txq;
-        struct flow *   flow;
-        int             fd;
-        int             err = -ENOMEM;
+        struct timespec    now;
+        struct timespec    txq;
+        struct flow *      flow;
+        struct ssm_rbuff * tx_rb = NULL;
+        int                fd;
+        int                err = -ENOMEM;
+
+        if (info->id < 0 || info->id >= SYS_MAX_FLOWS)
+                return -EBADF;
 
         clock_gettime(PTHREAD_COND_CLOCK, &now);
 
@@ -807,10 +813,7 @@ static int flow_init(struct flow_info * info,
                 if (flow->tx_rb == NULL)
                         goto fail_tx_rb;
 
-                txq.tv_sec  = SSM_RBUFF_TXQ_DELAY / 1000;
-                txq.tv_nsec = (SSM_RBUFF_TXQ_DELAY % 1000) * MILLION;
-
-                ssm_rbuff_set_txq_target(flow->tx_rb, &txq);
+                tx_rb = flow->tx_rb;
 
                 flow->set = ssm_flow_set_open(info->n_1_pid);
                 if (flow->set == NULL)
@@ -842,7 +845,7 @@ static int flow_init(struct flow_info * info,
                 uint32_t frct_mtu = flow_user_mtu(flow, info->mtu);
 
                 flow->frcti = frcti_create(fd, DELT_A, DELT_R,
-                                           info->mpl, rtt_hint,
+                                           info->mpl, rtt_hint, info->max_rtt,
                                            info->qs, frct_mtu);
                 if (flow->frcti == NULL)
                         goto fail_frcti;
@@ -856,6 +859,13 @@ static int flow_init(struct flow_info * info,
         flow_set_state(&proc.id_to_fd[info->id], FLOW_ALLOCATED);
 
         pthread_rwlock_unlock(&proc.lock);
+
+        if (tx_rb != NULL) {
+                txq.tv_sec  = SSM_RBUFF_TXQ_DELAY / 1000;
+                txq.tv_nsec = (SSM_RBUFF_TXQ_DELAY % 1000) * MILLION;
+
+                ssm_rbuff_set_txq_target(tx_rb, &txq);
+        }
 
         return fd;
 
@@ -1305,6 +1315,8 @@ int flow_dealloc(int fd)
 
         pthread_rwlock_unlock(&proc.lock);
 
+        frcti_set_draining(flow->frcti);
+
         flow_read(fd, buf, SOCK_BUF_SIZE);
 
         pthread_rwlock_rdlock(&proc.lock);
@@ -1395,6 +1407,18 @@ int ipcp_flow_dealloc(int fd)
         return err;
 }
 
+/* A settable delay is a normalised, non-negative timespec. */
+static bool delay_is_valid(const struct timespec * ts)
+{
+        if (ts->tv_sec < 0 || ts->tv_nsec < 0)
+                return false;
+
+        if (ts->tv_nsec >= BILLION)
+                return false;
+
+        return TS_TO_UINT64(*ts) <= SSM_RBUFF_TXQ_MAX_DELAY;
+}
+
 int fccntl(int fd,
            int cmd,
            ...)
@@ -1417,6 +1441,7 @@ int fccntl(int fd,
         time_t *          rtop;
         int               rc;
         bool              emit_eos = false;
+        bool              set_txq  = false;
 
         if (fd < 0 || fd >= PROC_MAX_FLOWS)
                 return -EBADF;
@@ -1500,7 +1525,10 @@ int fccntl(int fd,
                 if (flow->tx_rb == NULL)
                         goto eperm;
 
-                ssm_rbuff_set_txq_target(flow->tx_rb, timeo);
+                if (!delay_is_valid(timeo))
+                        goto einval;
+
+                set_txq = true;
                 break;
         case FLOWGTXQDLY:
                 timeo = va_arg(l, struct timespec *);
@@ -1525,21 +1553,21 @@ int fccntl(int fd,
 
                 /* Our flow write-only -> peer's read-only; restore on RDWR. */
                 if (flow->oflags & FLOWFWRONLY)
-                        ssm_rbuff_clr_bits(flow->rx_rb, RB_WR);
+                        ssm_rbuff_clr_flags(flow->rx_rb, RB_WR);
                 else
-                        ssm_rbuff_set_bits(flow->rx_rb, RB_WR);
+                        ssm_rbuff_set_flags(flow->rx_rb, RB_WR);
 
                 if (flow->oflags & FLOWFDOWN) {
-                        ssm_rbuff_set_bits(flow->rx_rb, RB_FLOWDOWN);
+                        ssm_rbuff_set_flags(flow->rx_rb, RB_FLOWDOWN);
                         if (flow->tx_rb != NULL)
-                                ssm_rbuff_set_bits(flow->tx_rb, RB_FLOWDOWN);
+                                ssm_rbuff_set_flags(flow->tx_rb, RB_FLOWDOWN);
                         if (flow->set != NULL)
                                 ssm_flow_set_notify(flow->set, flow->info.id,
                                                     FLOW_DOWN);
                 } else {
-                        ssm_rbuff_clr_bits(flow->rx_rb, RB_FLOWDOWN);
+                        ssm_rbuff_clr_flags(flow->rx_rb, RB_FLOWDOWN);
                         if (flow->tx_rb != NULL)
-                                ssm_rbuff_clr_bits(flow->tx_rb, RB_FLOWDOWN);
+                                ssm_rbuff_clr_flags(flow->tx_rb, RB_FLOWDOWN);
                         if (flow->set != NULL)
                                 ssm_flow_set_notify(flow->set, flow->info.id,
                                                     FLOW_UP);
@@ -1630,6 +1658,9 @@ int fccntl(int fd,
 
         if (emit_eos)
                 frcti_fin_snd(flow->frcti);
+
+        if (set_txq)
+                ssm_rbuff_set_txq_target(flow->tx_rb, timeo);
 
         va_end(l);
 
@@ -1856,7 +1887,9 @@ static ssize_t flow_write_frag(struct flow *     flow,
 
 /*
  * Initiator promotes on the install grace (it holds the key-confirm
- * tag); responder waits for peer_synced, with a near-exhaustion floor.
+ * tag); responder waits for peer_synced. The near-exhaustion floor
+ * backstops both roles: the receiver selects the epoch by the wire
+ * selector, so promoting beats wedging TX on a spent keyring.
  */
 static void flow_tx_promote(struct flow * flow)
 {
@@ -1877,7 +1910,7 @@ static void flow_tx_promote(struct flow * flow)
                 promote = ts_diff_ns(&now, &flow->rk_grace) >= 0;
         }
 
-        if (!promote && !flow->rk_initiator) {
+        if (!promote) {
                 nodes_left = crypt_nodes_left(flow->crypt);
                 promote = nodes_left >= 0 && nodes_left <= REKEY_PROMOTE_FLOOR;
         }
@@ -2636,6 +2669,12 @@ int ipcp_create_r(const struct ipcp_info * info)
         return irm__irm_result_des(&msg);
 }
 
+/* Layer-wide bound for flow_info; set once before flows are served. */
+void ipcp_flow_set_max_rtt(uint32_t max_rtt)
+{
+        proc.max_rtt = max_rtt;
+}
+
 int ipcp_flow_req_arr(const buffer_t * dst,
                       qosspec_t        qs,
                       time_t           mpl,
@@ -2657,6 +2696,7 @@ int ipcp_flow_req_arr(const buffer_t * dst,
         flow.qs      = qs;
         flow.mpl     = mpl;
         flow.mtu     = mtu;
+        flow.max_rtt = proc.max_rtt;
 
         if (ipcp_flow_req_arr__irm_req_ser(&msg, dst, &flow, data) < 0)
                 return -ENOMEM;
@@ -2732,6 +2772,7 @@ int ipcp_flow_alloc_reply(int              fd,
 
         flow.mpl         = mpl;
         flow.mtu         = mtu;
+        flow.max_rtt     = proc.max_rtt;
 
         if (ipcp_flow_alloc_reply__irm_msg_ser(&msg, &flow, response, data) < 0)
                 return -ENOMEM;
@@ -2746,8 +2787,14 @@ int ipcp_flow_alloc_reply(int              fd,
 int ipcp_flow_read(int                   fd,
                    struct ssm_pk_buff ** spb)
 {
-        struct flow * flow;
-        ssize_t       idx = -1;
+        struct flow *        flow;
+        struct ssm_pk_buff * out;
+        uint8_t *            ptr;
+        ssize_t              idx = -1;
+        ssize_t              fret;
+        size_t               len;
+        size_t               nfrags;
+        int                  ret;
 
         assert(fd >= 0 && fd < PROC_MAX_FLOWS);
         assert(spb);
@@ -2760,6 +2807,24 @@ int ipcp_flow_read(int                   fd,
                 pthread_rwlock_unlock(&proc.lock);
                 return -ENOTALLOC;
         }
+
+        if (FRCTI_IS_STREAM(flow->frcti)) {
+                pthread_rwlock_unlock(&proc.lock);
+                return -ENOTSUP;
+        }
+
+        pthread_rwlock_unlock(&proc.lock);
+
+        if (flow->crypt != NULL
+            && (ssm_rbuff_get_flags(flow->rx_rb) & RB_REKEY))
+                flow_rekey(flow);
+
+        /* Advance TX off a stale epoch even on recv-mostly flows. */
+        flow_tx_promote(flow);
+
+        tw_move_safe();
+
+        pthread_rwlock_rdlock(&proc.lock);
 
         /* Raw flow: deliver the popped pkt directly (no FRCT rq). */
         if (flow->frcti == NULL) {
@@ -2780,14 +2845,59 @@ int ipcp_flow_read(int                   fd,
 
         pthread_rwlock_unlock(&proc.lock);
 
+        /*
+         * A hand-back of the fed spb would leave it double-owned by
+         * the reorder queue; frcti_consume is the only safe way to
+         * take it. A write can also complete a PDU, so PDU_READY may
+         * be true with no loop-local spb to fall back on anyway.
+         */
+
+        ret = FRCTI_PDU_INFO(flow->frcti, &len, &nfrags);
+        if (ret < 0)
+                return ret;
+
+        /*
+         * Oversize (over frcti's own cap, or too big for any pool
+         * class): force frcti_consume's total > count drop branch
+         * now, so the run leaves the delivery edge instead of
+         * stalling every read after this one.
+         */
+        if (len > frcti_get_max_rcv_sdu(flow->frcti)) {
+                (void) FRCTI_CONSUME(flow->frcti, NULL, 0);
+                return -EMSGSIZE;
+        }
+
+        idx = ssm_pool_alloc_b(proc.pool, len, &ptr, &out, NULL);
+        if (idx < 0) {
+                if (idx == -EMSGSIZE)
+                        (void) FRCTI_CONSUME(flow->frcti, NULL, 0);
+                return (int) idx;
+        }
+
+        fret = FRCTI_CONSUME(flow->frcti, ptr, len);
+        if (fret < 0 || (size_t) fret != len) {
+                ssm_pool_remove(proc.pool, idx);
+                return fret < 0 ? (int) fret : -EIO;
+        }
+
+        *spb = out;
+
         return 0;
 }
 
+/*
+ * Writes an spb to an IPCP-internal flow, splitting it over multiple
+ * FRCT fragments when it exceeds the flow's fragment payload cap.
+ * Consumes spb on success; on failure spb is left to the caller.
+ */
 int ipcp_flow_write(int                  fd,
                     struct ssm_pk_buff * spb)
 {
-        struct flow *   flow;
-        int             ret;
+        struct flow * flow;
+        int           oflags;
+        size_t        len;
+        ssize_t       fret;
+        int           ret;
 
         assert(fd >= 0 && fd < PROC_MAX_FLOWS);
         assert(spb);
@@ -2806,7 +2916,53 @@ int ipcp_flow_write(int                  fd,
                 return -EPERM;
         }
 
+        if (FRCTI_IS_STREAM(flow->frcti)) {
+                pthread_rwlock_unlock(&proc.lock);
+                return -ENOTSUP;
+        }
+
+        oflags = flow->oflags;
+
         pthread_rwlock_unlock(&proc.lock);
+
+        if (flow->crypt != NULL
+            && (ssm_rbuff_get_flags(flow->rx_rb) & RB_REKEY))
+                flow_rekey(flow);
+
+        flow_tx_promote(flow);
+
+        /* Pre-empt TX key exhaustion; the timer is the backstop. */
+        if (flow_wm_due(flow)) {
+                STORE_RELAXED(&flow->rk_wm_inflight, true);
+
+                if (flow_rekey_trigger(flow) < 0)
+                        STORE_RELAXED(&flow->rk_wm_inflight, false);
+        }
+
+        tw_move_safe();
+
+        len = ssm_pk_buff_len(spb);
+        if (FRCTI_NEEDS_FRAG(flow->frcti, len)) {
+                fret = flow_write_frag(flow, ssm_pk_buff_head(spb), len,
+                                       oflags, NULL);
+
+                if (fret < 0)
+                        return (int) fret;
+
+                /* Partial: flow_write_frag swallowed the real cause. */
+                if (fret != (ssize_t) len) {
+                        /* PoA flows have no tx_rb flag to consult. */
+                        if (flow->tx_rb != NULL
+                            && (ssm_rbuff_get_flags(flow->tx_rb)
+                                & RB_FLOWDOWN))
+                                return -EFLOWDOWN;
+                        return -EIO;
+                }
+
+                ipcp_spb_release(spb);
+
+                return 0;
+        }
 
         ret = flow_tx_spb(flow, spb, FRCT_FR_SOLE, true, NULL);
 
@@ -2875,6 +3031,11 @@ int np1_flow_read(int                   fd,
         return 0;
 }
 
+/*
+ * An N-1 flow gets no flow_write to advance its TX epoch off a rotated
+ * key. Promoting is local; a re-key request here would block on the
+ * IRMd.
+ */
 int np1_flow_write(int                  fd,
                    struct ssm_pk_buff * spb,
                    struct ssm_pool *    pool)
@@ -2953,10 +3114,10 @@ int ipcp_flow_fini(int fd)
                 return -1;
         }
 
-        ssm_rbuff_set_bits(proc.flows[fd].rx_rb, RB_FLOWDOWN);
+        ssm_rbuff_set_flags(proc.flows[fd].rx_rb, RB_FLOWDOWN);
 
         if (proc.flows[fd].tx_rb != NULL)
-                ssm_rbuff_set_bits(proc.flows[fd].tx_rb, RB_FLOWDOWN);
+                ssm_rbuff_set_flags(proc.flows[fd].tx_rb, RB_FLOWDOWN);
 
         if (proc.flows[fd].set != NULL)
                 ssm_flow_set_notify(proc.flows[fd].set, proc.flows[fd].info.id,

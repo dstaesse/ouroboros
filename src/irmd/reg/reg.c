@@ -2425,7 +2425,7 @@ int reg_flow_store_pending(int             flow_id,
                         flow->rk.has_pending       = true;
                         /* Doorbell raised only after the seed is parked. */
                         if (flow->n_rb != NULL)
-                                ssm_rbuff_set_bits(flow->n_rb, RB_REKEY);
+                                ssm_rbuff_set_flags(flow->n_rb, RB_REKEY);
                         ret = 0;
                 } else {
                         ret = -ENOMEM;
@@ -2484,10 +2484,10 @@ int reg_flow_store_pending_direct(int             flow_id,
                 flow->rk.pulled |= RK_N_1_PID;
 
         if (flow->n_rb != NULL && !(flow->rk.pulled & RK_N_PID))
-                ssm_rbuff_set_bits(flow->n_rb, RB_REKEY);
+                ssm_rbuff_set_flags(flow->n_rb, RB_REKEY);
 
         if (flow->n_1_rb != NULL && !(flow->rk.pulled & RK_N_1_PID))
-                ssm_rbuff_set_bits(flow->n_1_rb, RB_REKEY);
+                ssm_rbuff_set_flags(flow->n_1_rb, RB_REKEY);
 
         ret = 0;
  out:
@@ -2526,11 +2526,11 @@ static void __take_pending_direct(struct reg_flow * flow,
         if (allocator) {
                 flow->rk.pulled |= RK_N_1_PID;
                 if (flow->n_1_rb != NULL)
-                        ssm_rbuff_clr_bits(flow->n_1_rb, RB_REKEY);
+                        ssm_rbuff_clr_flags(flow->n_1_rb, RB_REKEY);
         } else {
                 flow->rk.pulled |= RK_N_PID;
                 if (flow->n_rb != NULL)
-                        ssm_rbuff_clr_bits(flow->n_rb, RB_REKEY);
+                        ssm_rbuff_clr_flags(flow->n_rb, RB_REKEY);
         }
 
         if ((flow->rk.pulled & RK_PID_MASK) != RK_PID_MASK)
@@ -2575,7 +2575,7 @@ int reg_flow_take_pending(int       flow_id,
         flow->rk.has_pending = false;
         crypt_secure_clear(flow->rk.pending_seed, SYMMKEYSZ);
         if (flow->n_rb != NULL)
-                ssm_rbuff_clr_bits(flow->n_rb, RB_REKEY);
+                ssm_rbuff_clr_flags(flow->n_rb, RB_REKEY);
 
         ret = 0;
  out:

@@ -172,8 +172,9 @@ int reg_flow_update(struct reg_flow *  flow,
                 assert(flow->info.n_pid != 0);
                 assert(info->mpl != 0);
 
-                flow->info.mpl = info->mpl;
-                flow->info.mtu = info->mtu;
+                flow->info.mpl     = info->mpl;
+                flow->info.mtu     = info->mtu;
+                flow->info.max_rtt = info->max_rtt;
 
                 if (flow->info.state == FLOW_ALLOC_PENDING)
                         break;

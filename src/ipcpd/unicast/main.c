@@ -85,7 +85,7 @@ static int initialize_components(struct ipcp_config * conf)
                 goto fail_dir;
         }
 
-        if (fa_init()) {
+        if (fa_init(conf->unicast.dt.max_rtt)) {
                 log_err("Failed to initialize flow allocator component.");
                 goto fail_fa;
         }
