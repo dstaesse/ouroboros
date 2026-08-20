@@ -35,7 +35,12 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#if defined(__APPLE__)
+/* macOS hides O_NOFOLLOW behind the BSD feature set. */
+#define _DARWIN_C_SOURCE
+#else
 #define _POSIX_C_SOURCE 200809L
+#endif
 
 #include <ouroboros/crc64.h>
 #include <ouroboros/dev.h>
