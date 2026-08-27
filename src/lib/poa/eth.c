@@ -44,6 +44,7 @@
 #include <ouroboros/hash.h>
 #include <ouroboros/logs.h>
 #include <ouroboros/pthread.h>
+#include <ouroboros/random.h>
 #include <ouroboros/sockets.h>
 #include <ouroboros/time.h>
 
@@ -314,6 +315,20 @@ static bool mac_is_zero(const uint8_t * mac)
         static const uint8_t zero[POA_MAC_SIZE] = { 0 };
 
         return memcmp(mac, zero, POA_MAC_SIZE) == 0;
+}
+
+/* Assign a random MAC on loopback interfaces (zero MAC). */
+static int eth_dev_mac(uint8_t * mac)
+{
+        if (!mac_is_zero(mac))
+                return 0;
+
+        if (random_buffer(mac, POA_MAC_SIZE) < 0)
+                return -1;
+
+        mac[0] = (mac[0] | 0x02) & 0xFE;
+
+        return 0;
 }
 
 static bool eth_query_is_match(const struct eth_query * q,
@@ -804,6 +819,9 @@ static int eth_dev_info(const char * dev,
         }
 
         close(fd);
+
+        if (eth_dev_mac(mac) < 0)
+                return -EIO;
 
         *mtu = MIN(MIN(ETH_MAX_MTU, POA_ETH_RD_BUF), (uint32_t) ifr.ifr_mtu);
         if (memcmp(dev, "lo", 2) == 0 && *mtu > POA_ETH_LO_MTU)
@@ -1405,6 +1423,9 @@ static int eth_dev_info(const char * dev,
 
         close(fd);
 
+        if (eth_dev_mac(mac) < 0)
+                return -1;
+
         *mtu = MIN(MIN(ETH_MAX_MTU, POA_ETH_RD_BUF), (uint32_t) ifr.ifr_mtu);
         if (memcmp(dev, "lo", 2) == 0 && *mtu > POA_ETH_LO_MTU)
                 *mtu = POA_ETH_LO_MTU;
@@ -1770,6 +1791,9 @@ static int eth_dev_info(const char * dev,
         }
 
         close(fd);
+
+        if (eth_dev_mac(mac) < 0)
+                return -1;
 
         *mtu = MIN(MIN(ETH_MAX_MTU, POA_ETH_RD_BUF), (uint32_t) ifr.ifr_mtu);
         if (memcmp(dev, "lo", 2) == 0 && *mtu > POA_ETH_LO_MTU)
