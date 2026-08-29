@@ -1057,8 +1057,9 @@ int openssl_dhe_derive(EVP_PKEY * pkp,
                        int        kdf,
                        uint8_t *  s)
 {
-        uint8_t *  pos;
-        EVP_PKEY * pub;
+        uint8_t *    pos;
+        EVP_PKEY *   pub;
+        const char * name;
 
         assert(pkp != NULL);
         assert(pk.data != NULL);
@@ -1069,6 +1070,11 @@ int openssl_dhe_derive(EVP_PKEY * pkp,
         pub = d2i_PUBKEY(NULL, (const uint8_t **) &pos, (long) pk.len);
         if (pub == NULL)
                 goto fail_decode;
+
+        /* A peer key of another type must not reach the derivation */
+        name = EVP_PKEY_get0_type_name(pkp);
+        if (name == NULL || EVP_PKEY_is_a(pub, name) != 1)
+                goto fail_derive;
 
         if (__openssl_dhe_derive(pkp, pub, pk, kdf, s) < 0)
                 goto fail_derive;
