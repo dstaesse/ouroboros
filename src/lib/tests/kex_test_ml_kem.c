@@ -267,6 +267,7 @@ static int test_kex_kem_corrupted_ciphertext(const char * algo)
         uint8_t           s1[SYMMKEYSZ];
         uint8_t           s2[SYMMKEYSZ];
         int               kdf;
+        int               ret;
 
         TEST_START("(%s)", algo);
 
@@ -301,14 +302,15 @@ static int test_kex_kem_corrupted_ciphertext(const char * algo)
         buf2[0] ^= 0xFF;
         buf2[ct_len - 1] ^= 0xFF;
 
-        /* ML-KEM uses implicit rejection */
-        if (kex_kem_decap(pkp, ct, kdf, s2) < 0) {
+        /* EC hybrids may reject the corrupted point explicitly */
+        ret = kex_kem_decap(pkp, ct, kdf, s2);
+        if (strstr(algo, "SecP") == NULL && ret < 0) {
                 printf("Decapsulation failed unexpectedly.\n");
                 goto fail_pkp;
         }
 
-        /* The shared secrets should NOT match with corrupted CT */
-        if (memcmp(s1, s2, SYMMKEYSZ) == 0) {
+        /* Corrupted CT must never yield the original secret */
+        if (ret == 0 && memcmp(s1, s2, SYMMKEYSZ) == 0) {
                 printf("Corrupted ciphertext produced same secret.\n");
                 goto fail_pkp;
         }

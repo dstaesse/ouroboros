@@ -69,8 +69,10 @@
 /* Hybrid KEM NIDs: project-assigned range, OpenSSL defines none */
 #define NID_X25519MLKEM768     2053
 #define NID_X448MLKEM1024      2054
+#define NID_SecP256r1MLKEM768  2055
+#define NID_SecP384r1MLKEM1024 2056
 #define NID_HYBRID_KEM_MIN     NID_X25519MLKEM768
-#define NID_HYBRID_KEM_MAX     NID_X448MLKEM1024
+#define NID_HYBRID_KEM_MAX     NID_SecP384r1MLKEM1024
 
 /* KDF NIDs (match OpenSSL values) */
 #define NID_hkdf               1036

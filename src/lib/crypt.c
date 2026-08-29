@@ -69,39 +69,43 @@ const uint16_t crypt_supported_nids[] = {
 };
 
 static const struct nid_map kex_nid_map[] = {
-        {NID_X9_62_prime256v1, "prime256v1"},
-        {NID_secp384r1,        "secp384r1"},
-        {NID_secp521r1,        "secp521r1"},
-        {NID_X25519,           "X25519"},
-        {NID_X448,             "X448"},
-        {NID_ffdhe2048,        "ffdhe2048"},
-        {NID_ffdhe3072,        "ffdhe3072"},
-        {NID_ffdhe4096,        "ffdhe4096"},
-        {NID_MLKEM512,         "ML-KEM-512"},
-        {NID_MLKEM768,         "ML-KEM-768"},
-        {NID_MLKEM1024,        "ML-KEM-1024"},
-        {NID_X25519MLKEM768,   "X25519MLKEM768"},
-        {NID_X448MLKEM1024,    "X448MLKEM1024"},
-        {NID_undef,            NULL}
+        {NID_X9_62_prime256v1,   "prime256v1"},
+        {NID_secp384r1,          "secp384r1"},
+        {NID_secp521r1,          "secp521r1"},
+        {NID_X25519,             "X25519"},
+        {NID_X448,               "X448"},
+        {NID_ffdhe2048,          "ffdhe2048"},
+        {NID_ffdhe3072,          "ffdhe3072"},
+        {NID_ffdhe4096,          "ffdhe4096"},
+        {NID_MLKEM512,           "ML-KEM-512"},
+        {NID_MLKEM768,           "ML-KEM-768"},
+        {NID_MLKEM1024,          "ML-KEM-1024"},
+        {NID_X25519MLKEM768,     "X25519MLKEM768"},
+        {NID_X448MLKEM1024,      "X448MLKEM1024"},
+        {NID_SecP256r1MLKEM768,  "SecP256r1MLKEM768"},
+        {NID_SecP384r1MLKEM1024, "SecP384r1MLKEM1024"},
+        {NID_undef,              NULL}
 };
 
 /* Ordered in strength preference, lowest first (NIST SP 800-57 levels) */
 const uint16_t kex_supported_nids[] = {
 #ifdef HAVE_OPENSSL
-        NID_ffdhe2048,        /* FFDHE-2048,  ~112-bit          */
-        NID_X9_62_prime256v1, /* ECDH P-256,   128-bit          */
-        NID_X25519,           /* ECDH X25519,  128-bit          */
-        NID_ffdhe3072,        /* FFDHE-3072,  ~128-bit          */
-        NID_ffdhe4096,        /* FFDHE-4096,  ~152-bit          */
-        NID_secp384r1,        /* ECDH P-384,   192-bit          */
-        NID_X448,             /* ECDH X448,    224-bit          */
-        NID_secp521r1,        /* ECDH P-521,   256-bit          */
+        NID_ffdhe2048,          /* FFDHE-2048,  ~112-bit          */
+        NID_X9_62_prime256v1,   /* ECDH P-256,   128-bit          */
+        NID_X25519,             /* ECDH X25519,  128-bit          */
+        NID_ffdhe3072,          /* FFDHE-3072,  ~128-bit          */
+        NID_ffdhe4096,          /* FFDHE-4096,  ~152-bit          */
+        NID_secp384r1,          /* ECDH P-384,   192-bit          */
+        NID_X448,               /* ECDH X448,    224-bit          */
+        NID_secp521r1,          /* ECDH P-521,   256-bit          */
 #ifdef HAVE_ML
-        NID_MLKEM512,         /* ML-KEM-512,  PQC L1 (~AES-128) */
-        NID_MLKEM768,         /* ML-KEM-768,  PQC L3 (~AES-192) */
-        NID_MLKEM1024,        /* ML-KEM-1024, PQC L5 (~AES-256) */
-        NID_X25519MLKEM768,   /* X25519 + ML-KEM-768,  PQC L3   */
-        NID_X448MLKEM1024,    /* X448 + ML-KEM-1024,   PQC L5   */
+        NID_MLKEM512,           /* ML-KEM-512,  PQC L1 (~AES-128) */
+        NID_MLKEM768,           /* ML-KEM-768,  PQC L3 (~AES-192) */
+        NID_MLKEM1024,          /* ML-KEM-1024, PQC L5 (~AES-256) */
+        NID_SecP256r1MLKEM768,  /* P-256 + ML-KEM-768,   PQC L3   */
+        NID_X25519MLKEM768,     /* X25519 + ML-KEM-768,  PQC L3   */
+        NID_SecP384r1MLKEM1024, /* P-384 + ML-KEM-1024,  PQC L5   */
+        NID_X448MLKEM1024,      /* X448 + ML-KEM-1024,   PQC L5   */
 #endif
 #endif
         NID_undef

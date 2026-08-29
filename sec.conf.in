@@ -46,8 +46,10 @@
 #   ML-KEM-1024    CRYSTALS-Kyber-1024
 #
 # Hybrid KEMs:
-#   X25519MLKEM768  X25519 + ML-KEM-768
-#   X448MLKEM1024   X448 + ML-KEM-1024
+#   X25519MLKEM768      X25519 + ML-KEM-768
+#   X448MLKEM1024       X448 + ML-KEM-1024
+#   SecP256r1MLKEM768   NIST P-256 + ML-KEM-768
+#   SecP384r1MLKEM1024  NIST P-384 + ML-KEM-1024
 #
 # Supported cipher algorithms (cipher=):
 # --------------------------------------
