@@ -378,14 +378,16 @@ ssize_t kex_kem_encap(buffer_t  pk,
 #endif
 }
 
-ssize_t kex_kem_encap_raw(buffer_t  pk,
-                          uint8_t * ct,
-                          int       kdf,
-                          uint8_t * s)
+ssize_t kex_kem_encap_raw(const char * algo,
+                          buffer_t     pk,
+                          uint8_t *    ct,
+                          int          kdf,
+                          uint8_t *    s)
 {
 #ifdef HAVE_OPENSSL
-        return openssl_kem_encap_raw(pk, ct, kdf, s);
+        return openssl_kem_encap_raw(algo, pk, ct, kdf, s);
 #else
+        (void) algo;
         (void) pk;
         (void) ct;
         (void) kdf;
@@ -419,19 +421,6 @@ int kex_get_algo_from_pk_der(buffer_t pk,
 {
 #ifdef HAVE_OPENSSL
         return openssl_get_algo_from_pk_der(pk, algo);
-#else
-        (void) pk;
-        algo[0] = '\0';
-
-        return -ECRYPT;
-#endif
-}
-
-int kex_get_algo_from_pk_raw(buffer_t pk,
-                             char *   algo)
-{
-#ifdef HAVE_OPENSSL
-        return openssl_get_algo_from_pk_raw(pk, algo);
 #else
         (void) pk;
         algo[0] = '\0';
@@ -545,6 +534,11 @@ int kex_validate_nid(int nid)
         }
 
         return -ENOTSUP;
+}
+
+bool kex_nid_is_hybrid(uint16_t nid)
+{
+        return nid >= NID_HYBRID_KEM_MIN && nid <= NID_HYBRID_KEM_MAX;
 }
 
 const char * md_nid_to_str(uint16_t nid)
@@ -1032,14 +1026,16 @@ int crypt_load_pubkey_file_to_der(const char * path,
 }
 
 int crypt_load_pubkey_raw_file(const char * path,
+                               const char * algo,
                                buffer_t *   buf)
 {
         assert(buf != NULL);
 
 #ifdef HAVE_OPENSSL
-        return openssl_load_pubkey_raw_file(path, buf);
+        return openssl_load_pubkey_raw_file(path, algo, buf);
 #else
         (void) path;
+        (void) algo;
 
         buf->data = NULL;
         buf->len  = 0;
@@ -1048,14 +1044,16 @@ int crypt_load_pubkey_raw_file(const char * path,
 }
 
 int crypt_load_privkey_raw_file(const char * path,
+                                const char * algo,
                                 void **      key)
 {
         *key = NULL;
 
 #ifdef HAVE_OPENSSL
-        return openssl_load_privkey_raw_file(path, key);
+        return openssl_load_privkey_raw_file(path, algo, key);
 #else
         (void) path;
+        (void) algo;
 
         return 0;
 #endif

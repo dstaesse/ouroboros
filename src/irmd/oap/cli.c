@@ -51,7 +51,7 @@ struct oap_cli_ctx {
         uint8_t           __id[OAP_ID_SIZE];
         buffer_t          id;
         char              peer[NAME_SIZE + 1]; /* expected server name */
-        uint8_t           kex_buf[CRYPT_KEY_BUFSZ];
+        uint8_t           kex_buf[OAP_KEX_NIDSZ + CRYPT_KEY_BUFSZ];
         uint8_t           req_hash[MAX_HASH_SIZE];
         size_t            req_hash_len;
         int               req_md_nid;
@@ -113,13 +113,13 @@ int load_server_kem_pk(const char *        name,
         assert(cfg != NULL);
         assert(pk != NULL);
 
-        ext = IS_HYBRID_KEM(cfg->x.str) ? "raw" : "pem";
+        ext = IS_HYBRID_KEM_NID(cfg->x.nid) ? "raw" : "pem";
 
         snprintf(path, sizeof(path),
                  OUROBOROS_CLI_CRT_DIR "/%s/kex.srv.pub.%s", name, ext);
 
-        if (IS_HYBRID_KEM(cfg->x.str)) {
-                if (crypt_load_pubkey_raw_file(path, pk) < 0) {
+        if (IS_HYBRID_KEM_NID(cfg->x.nid)) {
+                if (crypt_load_pubkey_raw_file(path, cfg->x.str, pk) < 0) {
                         log_err("Failed to load %s pubkey from %s.", ext, path);
                         return -1;
                 }
@@ -173,12 +173,14 @@ static int do_client_kex_prepare_kem_encap(const char *         server_name,
                 return -ECRYPT;
         }
 
-        if (IS_HYBRID_KEM(scfg->x.str))
-                len = kex_kem_encap_raw(server_pk, kex->data,
+        if (IS_HYBRID_KEM_NID(scfg->x.nid)) {
+                len = kex_kem_encap_raw(scfg->x.str, server_pk,
+                                        kex->data + OAP_KEX_NIDSZ,
                                         scfg->k.nid, key_buf);
-        else
-                len = kex_kem_encap(server_pk, kex->data,
-                                    scfg->k.nid, key_buf);
+                len = oap_kex_tag_nid(kex->data, scfg->x.nid, len);
+        } else {
+                len = kex_kem_encap(server_pk, kex->data, scfg->k.nid, key_buf);
+        }
 
         freebuf(server_pk);
 
@@ -210,7 +212,13 @@ static int do_client_kex_prepare_kem_decap(struct oap_cli_ctx * s)
         ssize_t             len;
 
         /* Server encaps: generate keypair, send PK */
-        len = kex_pkp_create(scfg, &s->pkp, kex->data);
+        if (IS_HYBRID_KEM_NID(scfg->x.nid)) {
+                len = kex_pkp_create(scfg, &s->pkp, kex->data + OAP_KEX_NIDSZ);
+                len = oap_kex_tag_nid(kex->data, scfg->x.nid, len);
+        } else {
+                len = kex_pkp_create(scfg, &s->pkp, kex->data);
+        }
+
         if (len < 0) {
                 log_err_id(id, "Failed to generate KEM keypair.");
                 return -ECRYPT;
@@ -420,6 +428,13 @@ static int do_client_kex_complete_kem(struct oap_cli_ctx *   s,
 
         ct.data = peer_hdr->kex.data;
         ct.len  = peer_hdr->kex.len;
+
+        if (IS_HYBRID_KEM_NID(scfg->x.nid)) {
+                if (oap_kex_strip_nid(&ct, scfg->x.nid) < 0) {
+                        log_err_id(id, "KEX algo mismatch in CT.");
+                        return -ECRYPT;
+                }
+        }
 
         if (kex_kem_decap(s->pkp, ct, scfg->k.nid, key_buf) < 0) {
                 log_err_id(id, "Failed to decapsulate KEM.");

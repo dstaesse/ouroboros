@@ -51,9 +51,9 @@ extern int load_srv_credentials(const struct name_info * info,
                                 void **                  crt);
 extern int load_srv_sec_config(const struct name_info * info,
                                struct sec_config *      cfg);
-extern int load_server_kem_keypair(const char * name,
-                                   bool         raw_fmt,
-                                   void **      pkp);
+extern int load_server_kem_keypair(const char *        name,
+                                   struct sec_config * cfg,
+                                   void **             pkp);
 #else
 
 int load_srv_credentials(const struct name_info * info,
@@ -79,23 +79,26 @@ int load_srv_sec_config(const struct name_info * info,
         return load_sec_config(info->name, info->s.sec, cfg);
 }
 
-int load_server_kem_keypair(const char * name,
-                            bool         raw_fmt,
-                            void **      pkp)
+int load_server_kem_keypair(const char *        name,
+                            struct sec_config * cfg,
+                            void **             pkp)
 {
         char         path[PATH_MAX];
         const char * ext;
+        bool         raw_fmt;
 
         assert(name != NULL);
+        assert(cfg != NULL);
         assert(pkp != NULL);
 
+        raw_fmt = IS_HYBRID_KEM_NID(cfg->x.nid);
         ext = raw_fmt ? "raw" : "pem";
 
         snprintf(path, sizeof(path),
                  OUROBOROS_SRV_CRT_DIR "/%s/kex.key.%s", name, ext);
 
         if (raw_fmt) {
-                if (crypt_load_privkey_raw_file(path, pkp) < 0) {
+                if (crypt_load_privkey_raw_file(path, cfg->x.str, pkp) < 0) {
                         log_err("Failed to load %s keypair from %s.",
                                 ext, path);
                         return -ECRYPT;
@@ -109,6 +112,7 @@ int load_server_kem_keypair(const char * name,
         }
 
         log_dbg("Loaded server KEM keypair from %s.", path);
+
         return 0;
 }
 
@@ -117,18 +121,19 @@ int load_server_kem_keypair(const char * name,
 static int get_algo_from_peer_key(const struct oap_hdr * peer_hdr,
                                   char *                 algo_buf)
 {
-        uint8_t * id = peer_hdr->id.data;
-        int       ret;
+        uint8_t *    id = peer_hdr->id.data;
+        const char * name;
 
         if (OAP_KEX_IS_RAW_FMT(peer_hdr)) {
-                ret = kex_get_algo_from_pk_raw(peer_hdr->kex, algo_buf);
-                if (ret < 0) {
-                        log_err_id(id, "Failed to get algo from raw key.");
+                name = kex_nid_to_str(oap_kex_nid(peer_hdr->kex));
+                if (name == NULL || !IS_HYBRID_KEM(name)) {
+                        log_err_id(id, "Bad algo NID in raw key.");
                         return -ECRYPT;
                 }
+
+                strcpy(algo_buf, name);
         } else {
-                ret = kex_get_algo_from_pk_der(peer_hdr->kex, algo_buf);
-                if (ret < 0) {
+                if (kex_get_algo_from_pk_der(peer_hdr->kex, algo_buf) < 0) {
                         log_err_id(id, "Failed to get algo from DER key.");
                         return -ECRYPT;
                 }
@@ -216,14 +221,19 @@ static int do_server_kem_decap(const struct name_info * info,
         int       ret;
         uint8_t * id = peer_hdr->id.data;
 
-        ret = load_server_kem_keypair(info->name,
-                                      peer_hdr->kex_flags.fmt,
-                                      &server_pkp);
-        if (ret < 0)
-                return ret;
-
         ct.data = peer_hdr->kex.data;
         ct.len  = peer_hdr->kex.len;
+
+        if (IS_HYBRID_KEM_NID(scfg->x.nid)) {
+                if (oap_kex_strip_nid(&ct, scfg->x.nid) < 0) {
+                        log_err_id(id, "KEX algo mismatch in CT.");
+                        return -ECRYPT;
+                }
+        }
+
+        ret = load_server_kem_keypair(info->name, scfg, &server_pkp);
+        if (ret < 0)
+                return ret;
 
         ret = kex_kem_decap(server_pkp, ct, scfg->k.nid, sk->key);
 
@@ -251,12 +261,20 @@ static int do_server_kem_encap(const struct oap_hdr * peer_hdr,
         client_pk.data = peer_hdr->kex.data;
         client_pk.len  = peer_hdr->kex.len;
 
-        if (IS_HYBRID_KEM(scfg->x.str))
-                ct_len = kex_kem_encap_raw(client_pk, kex->data,
+        if (IS_HYBRID_KEM_NID(scfg->x.nid)) {
+                if (oap_kex_strip_nid(&client_pk, scfg->x.nid) < 0) {
+                        log_err_id(id, "KEX algo mismatch in PK.");
+                        return -ECRYPT;
+                }
+
+                ct_len = kex_kem_encap_raw(scfg->x.str, client_pk,
+                                           kex->data + OAP_KEX_NIDSZ,
                                            scfg->k.nid, sk->key);
-        else
+                ct_len = oap_kex_tag_nid(kex->data, scfg->x.nid, ct_len);
+        } else {
                 ct_len = kex_kem_encap(client_pk, kex->data,
                                        scfg->k.nid, sk->key);
+        }
 
         if (ct_len < 0) {
                 log_err_id(id, "Failed to encapsulate KEM.");
@@ -385,27 +403,27 @@ int oap_srv_process(const struct name_info * info,
                     const buffer_t *         cached_crt,
                     buffer_t *               peer_crt)
 {
-        struct oap_hdr        peer_hdr;
-        struct oap_hdr        local_hdr;
-        struct sec_config     scfg;
-        uint8_t               kex_buf[CRYPT_KEY_BUFSZ];
-        uint8_t               hash_buf[MAX_HASH_SIZE];
-        uint8_t               kc_buf[MAX_HASH_SIZE];
-        uint8_t               resp_hash_buf[MAX_HASH_SIZE];
-        uint8_t               hs_key[SYMMKEYSZ];
-        const uint8_t *       seal_key = NULL;
-        buffer_t              req_hash  = BUF_INIT;
-        buffer_t              resp_hash = BUF_INIT;
-        buffer_t              crt_der   = BUF_INIT;
-        buffer_t              rsp_tag   = BUF_INIT;
-        ssize_t               hash_ret;
-        char                  cli_name[NAME_SIZE + 1];
-        uint8_t *             id;
-        void *                pkp = NULL;
-        void *                crt = NULL;
-        int                   req_md_nid;
-        int                   enc_flags = 0;
-        int                   ret;
+        struct oap_hdr    peer_hdr;
+        struct oap_hdr    local_hdr;
+        struct sec_config scfg;
+        uint8_t           kex_buf[OAP_KEX_NIDSZ + CRYPT_KEY_BUFSZ];
+        uint8_t           hash_buf[MAX_HASH_SIZE];
+        uint8_t           kc_buf[MAX_HASH_SIZE];
+        uint8_t           resp_hash_buf[MAX_HASH_SIZE];
+        uint8_t           hs_key[SYMMKEYSZ];
+        const uint8_t *   seal_key = NULL;
+        buffer_t          req_hash  = BUF_INIT;
+        buffer_t          resp_hash = BUF_INIT;
+        buffer_t          crt_der   = BUF_INIT;
+        buffer_t          rsp_tag   = BUF_INIT;
+        ssize_t           hash_ret;
+        char              cli_name[NAME_SIZE + 1];
+        uint8_t *         id;
+        void *            pkp = NULL;
+        void *            crt = NULL;
+        int               req_md_nid;
+        int               enc_flags = 0;
+        int               ret;
 
         assert(info != NULL);
         assert(rsp_buf != NULL);

@@ -137,7 +137,7 @@
 #
 # File formats:
 # - Pure ML-KEM: PEM format (.pem extension)
-# - Hybrid KEMs: Raw bytes (.raw extension)
+# - Hybrid KEMs: Raw key bytes (.raw extension), for the kex= algorithm
 #
 # Examples:
 # ---------

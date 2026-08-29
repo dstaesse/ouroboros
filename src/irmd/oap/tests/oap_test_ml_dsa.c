@@ -37,6 +37,7 @@
 
 #include <test/certs/ml_dsa.h>
 
+#include "oap/hdr.h"
 #include "oap.h"
 #include "common.h"
 
@@ -97,16 +98,16 @@ int mock_load_credentials(void ** pkp,
         return 0;
 }
 
-int load_server_kem_keypair(const char * name,
-                            bool         raw_fmt,
-                            void **      pkp)
+int load_server_kem_keypair(const char *        name,
+                            struct sec_config * cfg,
+                            void **             pkp)
 {
 #ifdef HAVE_OPENSSL
         struct sec_config local_cfg;
         ssize_t           pk_len;
 
         (void) name;
-        (void) raw_fmt;
+        (void) cfg;
 
         /*
         * Uses reference counting. The caller will call
@@ -150,7 +151,7 @@ int load_server_kem_keypair(const char * name,
 
 #else
         (void) name;
-        (void) raw_fmt;
+        (void) cfg;
         (void) pkp;
         return -1;
 #endif
@@ -720,6 +721,44 @@ static int test_oap_kem_srv_uncfg_all(void)
         return ret;
 }
 
+/* Server must reject a raw kex payload tagged with a bad NID */
+static int test_oap_kem_bad_nid_tag(uint16_t bad_nid)
+{
+        struct oap_test_ctx ctx;
+
+        test_cfg_init(NID_X25519MLKEM768, NID_aes_256_gcm,
+                      get_random_kdf(), SRV_ENCAP, NO_AUTH);
+
+        TEST_START("(%u)", bad_nid);
+
+        if (oap_test_setup_kem(&ctx, root_ca_crt_ml, im_ca_crt_ml) < 0)
+                goto fail;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        /* NO_AUTH request: raw kex starts after the fixed header */
+        oap_kex_set_nid(ctx.req_hdr.data + OAP_HDR_MIN_SIZE, bad_nid);
+
+        if (oap_srv_process_ctx(&ctx) == 0) {
+                printf("Server accepted bad NID tag %u.\n", bad_nid);
+                goto fail_cleanup;
+        }
+
+        oap_test_teardown_kem(&ctx);
+
+        TEST_SUCCESS("(%u)", bad_nid);
+
+        return TEST_RC_SUCCESS;
+ fail_cleanup:
+        oap_test_teardown_kem(&ctx);
+ fail:
+        TEST_FAIL("(%u)", bad_nid);
+        return TEST_RC_FAIL;
+}
+
 /* Client encap must be rejected when the server has no KEX config */
 static int test_oap_kem_cli_encap_srv_uncfg(void)
 {
@@ -782,6 +821,8 @@ int oap_test_ml_dsa(int    argc,
 
         ret |= test_oap_kem_srv_uncfg_all();
         ret |= test_oap_kem_cli_encap_srv_uncfg();
+        ret |= test_oap_kem_bad_nid_tag(NID_X25519); /* known, not hybrid */
+        ret |= test_oap_kem_bad_nid_tag(0xFFFF);     /* unknown           */
 
         ret |= test_oap_corrupted_request();
         ret |= test_oap_corrupted_response();
@@ -812,6 +853,7 @@ int oap_test_ml_dsa(int    argc,
         (void) test_oap_kem_srv_uncfg;
         (void) test_oap_kem_srv_uncfg_all;
         (void) test_oap_kem_cli_encap_srv_uncfg;
+        (void) test_oap_kem_bad_nid_tag;
         (void) test_oap_corrupted_request;
         (void) test_oap_corrupted_response;
         (void) test_oap_truncated_request;

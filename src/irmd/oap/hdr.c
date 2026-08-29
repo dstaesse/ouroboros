@@ -211,6 +211,56 @@ void oap_hdr_fini(struct oap_hdr * oap_hdr)
         memset(oap_hdr, 0, sizeof(*oap_hdr));
 }
 
+uint16_t oap_kex_nid(buffer_t kex)
+{
+        uint16_t nid;
+
+        if (kex.len <= OAP_KEX_NIDSZ)
+                return NID_undef;
+
+        memcpy(&nid, kex.data, sizeof(nid));
+
+        return ntoh16(nid);
+}
+
+void oap_kex_set_nid(uint8_t * buf,
+                     uint16_t  nid)
+{
+        uint16_t v;
+
+        assert(buf != NULL);
+
+        v = hton16(nid);
+
+        memcpy(buf, &v, sizeof(v));
+}
+
+int oap_kex_strip_nid(buffer_t * kex,
+                      uint16_t   nid)
+{
+        assert(kex != NULL);
+
+        if (oap_kex_nid(*kex) != nid)
+                return -1;
+
+        kex->data += OAP_KEX_NIDSZ;
+        kex->len  -= OAP_KEX_NIDSZ;
+
+        return 0;
+}
+
+ssize_t oap_kex_tag_nid(uint8_t * buf,
+                        uint16_t  nid,
+                        ssize_t   len)
+{
+        if (len < 0)
+                return len;
+
+        oap_kex_set_nid(buf, nid);
+
+        return len + OAP_KEX_NIDSZ;
+}
+
 int oap_hdr_copy_data(const struct oap_hdr * hdr,
                       buffer_t *             out)
 {
@@ -286,7 +336,7 @@ static void write_oap_fixed(uint8_t *                 buf,
 
         kex_len = (uint16_t) hdr->kex.len;
         if (hdr->kex.len > 0 && IS_KEM_ALGORITHM(scfg->x.str)) {
-                if (IS_HYBRID_KEM(scfg->x.str))
+                if (IS_HYBRID_KEM_NID(scfg->x.nid))
                         kex_len |= OAP_KEX_FMT_BIT;
                 if (scfg->x.mode == KEM_MODE_CLIENT_ENCAP)
                         kex_len |= OAP_KEX_ROLE_BIT;

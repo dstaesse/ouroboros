@@ -182,17 +182,9 @@ static int test_kex_get_algo_from_pk(const char * algo)
         pk.len  = (size_t) len;
         pk.data = buf;
 
-        /* Use raw decode for hybrid KEMs, DER for others */
-        if (IS_HYBRID_KEM(algo)) {
-                if (kex_get_algo_from_pk_raw(pk, extracted_algo) < 0) {
-                        printf("Failed to extract algo from pk.\n");
-                        goto fail_pkp;
-                }
-        } else {
-                if (kex_get_algo_from_pk_der(pk, extracted_algo) < 0) {
-                        printf("Failed to extract algo from pk.\n");
-                        goto fail_pkp;
-                }
+        if (kex_get_algo_from_pk_der(pk, extracted_algo) < 0) {
+                printf("Failed to extract algo from pk.\n");
+                goto fail_pkp;
         }
 
         /* All algorithms should now return the specific group name */
@@ -221,6 +213,11 @@ static int test_kex_get_algo_from_pk_all(void)
 
         for (i = 0; kex_supported_nids[i] != NID_undef; i++) {
                 const char * algo = kex_nid_to_str(kex_supported_nids[i]);
+
+                /* Raw hybrid PKs are opaque, OAP carries the NID */
+                if (IS_HYBRID_KEM(algo))
+                        continue;
+
                 ret |= test_kex_get_algo_from_pk(algo);
         }
 

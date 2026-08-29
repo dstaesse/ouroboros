@@ -721,23 +721,6 @@ static int __openssl_kem_gen_key(const char * algo,
         return -ECRYPT;
 }
 
-/* Determine hybrid KEM algorithm from raw key/ciphertext length */
-static const char * __openssl_hybrid_algo_from_len(size_t len)
-{
-        switch(len) {
-        case X25519MLKEM768_PKSZ:
-                return "X25519MLKEM768";
-        case X25519MLKEM768_CTSZ:
-                return "X25519MLKEM768";
-        case X448MLKEM1024_PKSZ:
-                return "X448MLKEM1024";
-        default:
-                break;
-        }
-
-        return NULL;
-}
-
 static int __openssl_kex_gen_key(const char *  algo,
                                  EVP_PKEY **   kp)
 {
@@ -900,18 +883,19 @@ ssize_t openssl_kem_encap(buffer_t   pk,
         return -ECRYPT;
 }
 
-/* Hybrid KEM encapsulation: raw-encoded public key */
-ssize_t openssl_kem_encap_raw(buffer_t   pk,
-                              uint8_t *  ct,
-                              int        kdf,
-                              uint8_t *  s)
+/* Hybrid KEM encapsulation: NID-tagged raw-encoded public key */
+ssize_t openssl_kem_encap_raw(const char * algo,
+                              buffer_t     pk,
+                              uint8_t *    ct,
+                              int          kdf,
+                              uint8_t *    s)
 {
-        EVP_PKEY *   pub;
-        const char * algo;
-        uint8_t      salt[HKDF_SALT_LEN];
-        buffer_t     salt_b;
-        ssize_t      ret;
+        EVP_PKEY * pub;
+        uint8_t    salt[HKDF_SALT_LEN];
+        buffer_t   salt_b;
+        ssize_t    ret;
 
+        assert(algo != NULL);
         assert(pk.data != NULL);
         assert(ct != NULL);
         assert(s != NULL);
@@ -920,10 +904,6 @@ ssize_t openssl_kem_encap_raw(buffer_t   pk,
         salt_b.data = salt;
 
         if (derive_salt_from_pk_bytes(pk, salt_b) < 0)
-                goto fail_salt;
-
-        algo = __openssl_hybrid_algo_from_len(pk.len);
-        if (algo == NULL)
                 goto fail_salt;
 
         pub = EVP_PKEY_new_raw_public_key_ex(NULL, algo, NULL,
@@ -1069,23 +1049,6 @@ int openssl_get_algo_from_pk_der(buffer_t pk,
         EVP_PKEY_free(pub);
  fail_decode:
         return -ECRYPT;
-}
-
-int openssl_get_algo_from_pk_raw(buffer_t pk,
-                                 char *   algo)
-{
-        const char * hybrid_algo;
-
-        assert(pk.data != NULL);
-        assert(algo != NULL);
-
-        hybrid_algo = __openssl_hybrid_algo_from_len(pk.len);
-        if (hybrid_algo == NULL)
-                return -ECRYPT;
-
-        strcpy(algo, hybrid_algo);
-
-        return 0;
 }
 
 int openssl_dhe_derive(EVP_PKEY * pkp,
@@ -1519,14 +1482,16 @@ int openssl_load_pubkey_str(const char * str,
 }
 
 int openssl_load_pubkey_raw_file(const char * path,
+                                 const char * algo,
                                  buffer_t *   buf)
 {
-        FILE *        fp;
-        uint8_t       tmp_buf[CRYPT_KEY_BUFSZ];
-        size_t        bytes_read;
-        const char *  algo;
+        FILE *     fp;
+        uint8_t    tmp_buf[CRYPT_KEY_BUFSZ];
+        size_t     bytes_read;
+        EVP_PKEY * chk;
 
         assert(path != NULL);
+        assert(algo != NULL);
         assert(buf != NULL);
 
         fp = fopen(path, "rb");
@@ -1539,13 +1504,18 @@ int openssl_load_pubkey_raw_file(const char * path,
 
         pthread_cleanup_pop(false);
 
-        if (bytes_read == 0)
+        /* A full buffer means the file was truncated */
+        if (bytes_read == 0 || bytes_read == CRYPT_KEY_BUFSZ)
                 goto fail_read;
 
-        /* Validate that this is a known hybrid KEM format */
-        algo = __openssl_hybrid_algo_from_len(bytes_read);
-        if (algo == NULL)
+        /* Trial import: reject bad keys at load time */
+        chk = EVP_PKEY_new_raw_public_key_ex(NULL, algo, NULL,
+                                             tmp_buf, bytes_read);
+
+        if (chk == NULL)
                 goto fail_read;
+
+        EVP_PKEY_free(chk);
 
         buf->data = malloc(bytes_read);
         if (buf->data == NULL)
@@ -1565,21 +1535,6 @@ int openssl_load_pubkey_raw_file(const char * path,
         return -1;
 }
 
-/* Determine hybrid KEM algorithm from raw private key length */
-static const char * __openssl_hybrid_algo_from_sk_len(size_t len)
-{
-        switch(len) {
-        case X25519MLKEM768_SKSZ:
-                return "X25519MLKEM768";
-        case X448MLKEM1024_SKSZ:
-                return "X448MLKEM1024";
-        default:
-                break;
-        }
-
-        return NULL;
-}
-
 /* Wipe the raw-key staging buffer if a cancel aborts the read. */
 static void __cleanse_key_buf(void * o)
 {
@@ -1587,15 +1542,16 @@ static void __cleanse_key_buf(void * o)
 }
 
 int openssl_load_privkey_raw_file(const char * path,
+                                  const char * algo,
                                   void **      key)
 {
-        FILE *       fp;
-        uint8_t      tmp_buf[CRYPT_KEY_BUFSZ];
-        size_t       bytes_read;
-        const char * algo;
-        EVP_PKEY *   pkey;
+        FILE *     fp;
+        uint8_t    tmp_buf[CRYPT_KEY_BUFSZ];
+        size_t     bytes_read;
+        EVP_PKEY * pkey;
 
         assert(path != NULL);
+        assert(algo != NULL);
         assert(key != NULL);
 
         fp = fopen(path, "rb");
@@ -1611,11 +1567,6 @@ int openssl_load_privkey_raw_file(const char * path,
         pthread_cleanup_pop(false);
 
         if (bytes_read == 0)
-                goto fail_read;
-
-        /* Determine algorithm from key size */
-        algo = __openssl_hybrid_algo_from_sk_len(bytes_read);
-        if (algo == NULL)
                 goto fail_read;
 
         pkey = EVP_PKEY_new_raw_private_key_ex(NULL, algo, NULL,

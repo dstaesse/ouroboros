@@ -28,72 +28,70 @@
 
 struct ossl_crypt_ctx;
 
-ssize_t openssl_pkp_create(const char * algo,
-                           EVP_PKEY **  pkp,
-                           uint8_t *    pk);
+ssize_t                 openssl_pkp_create(const char * algo,
+                                           EVP_PKEY **  pkp,
+                                           uint8_t *    pk);
 
-void    openssl_pkp_destroy(EVP_PKEY * pkp);
+void                    openssl_pkp_destroy(EVP_PKEY * pkp);
 
-int     openssl_dhe_derive(EVP_PKEY * pkp,
-                           buffer_t   pk,
-                           int        kdf_nid,
-                           uint8_t *  s);
+int                     openssl_dhe_derive(EVP_PKEY * pkp,
+                                           buffer_t   pk,
+                                           int        kdf_nid,
+                                           uint8_t *  s);
 
-ssize_t openssl_kem_encap(buffer_t  pk,
-                          uint8_t * ct,
-                          int       kdf_nid,
-                          uint8_t * s);
+ssize_t                 openssl_kem_encap(buffer_t  pk,
+                                          uint8_t * ct,
+                                          int       kdf_nid,
+                                          uint8_t * s);
 
 /* no X509 DER support yet for DHKEM public keys */
-ssize_t openssl_kem_encap_raw(buffer_t  pk,
-                              uint8_t * ct,
-                              int       kdf_nid,
-                              uint8_t * s);
+ssize_t                 openssl_kem_encap_raw(const char * algo,
+                                              buffer_t     pk,
+                                              uint8_t *    ct,
+                                              int          kdf_nid,
+                                              uint8_t *    s);
 
-int     openssl_kem_decap(EVP_PKEY * priv,
-                          buffer_t   ct,
-                          int        kdf_nid,
-                          uint8_t *  s);
+int                     openssl_kem_decap(EVP_PKEY * priv,
+                                          buffer_t   ct,
+                                          int        kdf_nid,
+                                          uint8_t *  s);
 
-int     openssl_get_algo_from_pk_der(buffer_t pk,
-                                     char *   algo);
+int                     openssl_get_algo_from_pk_der(buffer_t pk,
+                                                     char *   algo);
 
-int     openssl_get_algo_from_pk_raw(buffer_t pk,
-                                     char *   algo);
+int                     openssl_seal(struct ossl_crypt_ctx * ctx,
+                                     const uint8_t *         key,
+                                     const uint8_t *         nonce,
+                                     buffer_t                aad,
+                                     buffer_t                in,
+                                     uint8_t *               out,
+                                     uint8_t *               tag);
 
-int     openssl_seal(struct ossl_crypt_ctx * ctx,
-                     const uint8_t *         key,
-                     const uint8_t *         nonce,
-                     buffer_t                aad,
-                     buffer_t                in,
-                     uint8_t *               out,
-                     uint8_t *               tag);
+int                     openssl_open(struct ossl_crypt_ctx * ctx,
+                                     const uint8_t *         key,
+                                     const uint8_t *         nonce,
+                                     buffer_t                aad,
+                                     buffer_t                in,
+                                     const uint8_t *         tag,
+                                     buffer_t *              out);
 
-int     openssl_open(struct ossl_crypt_ctx * ctx,
-                     const uint8_t *         key,
-                     const uint8_t *         nonce,
-                     buffer_t                aad,
-                     buffer_t                in,
-                     const uint8_t *         tag,
-                     buffer_t *              out);
+int                     openssl_oneshot_seal(int             nid,
+                                             const uint8_t * key,
+                                             const uint8_t * nonce,
+                                             buffer_t        aad,
+                                             buffer_t        in,
+                                             buffer_t *      out);
 
-int     openssl_oneshot_seal(int             nid,
-                             const uint8_t * key,
-                             const uint8_t * nonce,
-                             buffer_t        aad,
-                             buffer_t        in,
-                             buffer_t *      out);
+int                     openssl_oneshot_open(int             nid,
+                                             const uint8_t * key,
+                                             const uint8_t * nonce,
+                                             buffer_t        aad,
+                                             buffer_t        in,
+                                             buffer_t *      out);
 
-int     openssl_oneshot_open(int             nid,
-                             const uint8_t * key,
-                             const uint8_t * nonce,
-                             buffer_t        aad,
-                             buffer_t        in,
-                             buffer_t *      out);
-
-int     openssl_hkdf_expand(buffer_t key,
-                            buffer_t info,
-                            buffer_t out);
+int                     openssl_hkdf_expand(buffer_t key,
+                                            buffer_t info,
+                                            buffer_t out);
 
 struct ossl_crypt_ctx * openssl_crypt_create_ctx(struct crypt_sk * sk);
 
@@ -102,112 +100,113 @@ void                    openssl_crypt_destroy_ctx(struct ossl_crypt_ctx * ctx);
 int                     openssl_crypt_get_tagsz(struct ossl_crypt_ctx * ctx);
 
 /* AUTHENTICATION */
+int                     openssl_load_crt_file(const char * path,
+                                              void **      crt);
 
-int     openssl_load_crt_file(const char * path,
-                              void **      crt);
+int                     openssl_load_crt_str(const char * str,
+                                             void **      crt);
 
-int     openssl_load_crt_str(const char * str,
-                             void **      crt);
+int                     openssl_load_crt_der(buffer_t buf,
+                                             void **  crt);
 
-int     openssl_load_crt_der(buffer_t buf,
-                             void **  crt);
+int                     openssl_get_pubkey_crt(void *  crt,
+                                               void ** pk);
 
-int     openssl_get_pubkey_crt(void *  crt,
-                               void ** pk);
+void                    openssl_free_crt(void * crt);
 
-void    openssl_free_crt(void * crt);
+int                     openssl_load_privkey_file(const char * path,
+                                                  void **      key);
 
-int     openssl_load_privkey_file(const char * path,
-                                  void **      key);
+int                     openssl_load_privkey_str(const char * str,
+                                                 void **      key);
 
-int     openssl_load_privkey_str(const char * str,
-                                 void **      key);
+int                     openssl_load_pubkey_file(const char * path,
+                                                 void **      key);
 
-int     openssl_load_pubkey_file(const char * path,
-                                 void **      key);
+int                     openssl_load_pubkey_str(const char * str,
+                                                void **      key);
+int                     openssl_load_pubkey_file_to_der(const char * path,
+                                                        buffer_t *   buf);
+int                     openssl_load_pubkey_raw_file(const char * path,
+                                                     const char * algo,
+                                                     buffer_t *   buf);
 
-int     openssl_load_pubkey_str(const char * str,
-                                void **      key);
-int     openssl_load_pubkey_file_to_der(const char * path,
+int                     openssl_load_privkey_raw_file(const char * path,
+                                                      const char * algo,
+                                                      void **      key);
+
+int                     openssl_cmp_key(const EVP_PKEY * key1,
+                                        const EVP_PKEY * key2);
+
+void                    openssl_free_key(EVP_PKEY * key);
+
+int                     openssl_check_crt_name(void *       crt,
+                                               const char * name);
+
+int                     openssl_get_crt_name(void * crt,
+                                             char * name);
+
+int                     openssl_crt_str(const void * crt,
+                                        char *       str);
+
+int                     openssl_crt_der(const void * crt,
                                         buffer_t *   buf);
-int     openssl_load_pubkey_raw_file(const char * path,
-                                     buffer_t *   buf);
 
-int     openssl_load_privkey_raw_file(const char * path,
-                                      void **      key);
+void *                  openssl_auth_create_store(void);
 
-int     openssl_cmp_key(const EVP_PKEY * key1,
-                        const EVP_PKEY * key2);
+void                    openssl_auth_destroy_store(void * store);
 
-void    openssl_free_key(EVP_PKEY * key);
+int                     openssl_auth_add_crt_to_store(void * store,
+                                                      void * crt);
 
-int     openssl_check_crt_name(void *       crt,
-                               const char * name);
+void *                  openssl_auth_create_chain(void);
 
-int     openssl_get_crt_name(void * crt,
-                             char * name);
+void                    openssl_auth_destroy_chain(void * chain);
 
-int     openssl_crt_str(const void * crt,
-                        char *       str);
+int                     openssl_auth_add_crt_to_chain(void * chain,
+                                                      void * crt);
 
-int     openssl_crt_der(const void * crt,
-                        buffer_t *   buf);
+int                     openssl_verify_crt(void * store,
+                                           void * untrusted,
+                                           void * crt);
 
-void *  openssl_auth_create_store(void);
+int                     openssl_verify_crt_pin(void * store,
+                                               void * untrusted,
+                                               void * crt,
+                                               void * pin);
 
-void    openssl_auth_destroy_store(void * store);
+bool                    openssl_pk_requires_md(const EVP_PKEY * pk);
 
-int     openssl_auth_add_crt_to_store(void * store,
-                                      void * crt);
+int                     openssl_sign(EVP_PKEY * pkp,
+                                     int        md_nid,
+                                     buffer_t   msg,
+                                     buffer_t * sig);
 
-void *  openssl_auth_create_chain(void);
+int                     openssl_verify_sig(EVP_PKEY * pk,
+                                           int        md_nid,
+                                           buffer_t   msg,
+                                           buffer_t   sig);
 
-void    openssl_auth_destroy_chain(void * chain);
+ssize_t                 openssl_md_digest(int       md_nid,
+                                          buffer_t  in,
+                                          uint8_t * out);
 
-int     openssl_auth_add_crt_to_chain(void * chain,
-                                      void * crt);
-
-int     openssl_verify_crt(void * store,
-                           void * untrusted,
-                           void * crt);
-
-int     openssl_verify_crt_pin(void * store,
-                               void * untrusted,
-                               void * crt,
-                               void * pin);
-
-bool    openssl_pk_requires_md(const EVP_PKEY * pk);
-
-int     openssl_sign(EVP_PKEY * pkp,
-                     int        md_nid,
-                     buffer_t   msg,
-                     buffer_t * sig);
-
-int     openssl_verify_sig(EVP_PKEY * pk,
-                           int        md_nid,
-                           buffer_t   msg,
-                           buffer_t   sig);
-
-ssize_t openssl_md_digest(int        md_nid,
-                          buffer_t   in,
-                          uint8_t *  out);
-
-ssize_t openssl_md_len(int md_nid);
+ssize_t                 openssl_md_len(int md_nid);
 
 /* Secure memory allocation */
-int     openssl_secure_malloc_init(size_t max,
-                                   size_t guard);
+int                     openssl_secure_malloc_init(size_t max,
+                                                   size_t guard);
 
-void    openssl_secure_malloc_fini(void);
+void                    openssl_secure_malloc_fini(void);
 
-void *  openssl_secure_malloc(size_t size);
+void *                  openssl_secure_malloc(size_t size);
 
-void    openssl_secure_free(void * ptr,
-                            size_t size);
+void                    openssl_secure_free(void * ptr,
+                                            size_t size);
 
-void    openssl_secure_clear(void * ptr,
-                             size_t size);
+void                    openssl_secure_clear(void * ptr,
+                                             size_t size);
 
-void    openssl_cleanup(void);
+void                    openssl_cleanup(void);
 
 #endif /* OUROBOROS_LIB_CRYPT_OPENSSL_H */

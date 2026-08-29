@@ -32,9 +32,12 @@
 #define OAP_ID_SIZE      (16)
 #define OAP_HDR_MIN_SIZE (OAP_ID_SIZE + sizeof(uint64_t) + 6 * sizeof(uint16_t))
 
-#define OAP_KEX_FMT_BIT  0x8000 /* bit 15: 0=X.509 DER, 1=Raw               */
+#define OAP_KEX_FMT_BIT  0x8000 /* bit 15: 0=X.509 DER, 1=Raw: NID + bytes  */
 #define OAP_KEX_ROLE_BIT 0x4000 /* bit 14: 0=Server encaps, 1=Client encaps */
 #define OAP_KEX_LEN_MASK 0x3FFF /* bits 0-13: Length (0-16383 bytes)        */
+
+/* Raw format kex payloads lead with the algorithm NID */
+#define OAP_KEX_NIDSZ    sizeof(uint16_t)
 
 #define OAP_KEX_ROLE(hdr) (hdr->kex_flags.role)
 #define OAP_KEX_FMT(hdr) (hdr->kex_flags.fmt)
@@ -160,40 +163,55 @@ struct oap_hdr {
 };
 
 
-void oap_hdr_init(struct oap_hdr * hdr,
-                  buffer_t         id,
-                  uint8_t *        kex_buf,
-                  buffer_t         data,
-                  uint16_t         nid);
+void     oap_hdr_init(struct oap_hdr * hdr,
+                      buffer_t         id,
+                      uint8_t *        kex_buf,
+                      buffer_t         data,
+                      uint16_t         nid);
 
-void oap_hdr_fini(struct oap_hdr * oap_hdr);
+void     oap_hdr_fini(struct oap_hdr * oap_hdr);
+
+/* NID leading a raw format kex payload, NID_undef if too short */
+uint16_t oap_kex_nid(buffer_t kex);
+
+void     oap_kex_set_nid(uint8_t * buf,
+                         uint16_t  nid);
+
+/* Verify the NID leading a raw kex payload, then strip it */
+int      oap_kex_strip_nid(buffer_t * kex,
+                           uint16_t   nid);
+
+/* Tag a raw payload written at buf + OAP_KEX_NIDSZ, len passthrough */
+ssize_t  oap_kex_tag_nid(uint8_t * buf,
+                         uint16_t  nid,
+                         ssize_t   len);
 
 /* oap_hdr_encode option flags */
 #define OAP_ENC_REKEY (1U << 0) /* signed, cert-less re-key packet */
 
-int  oap_hdr_encode(struct oap_hdr *    hdr,
-                    void *              pkp,
-                    void *              crt,
-                    struct sec_config * scfg,
-                    buffer_t            rsp_tag,
-                    int                 req_md_nid,
-                    const uint8_t *     seal_key,
-                    int                 flags);
+int      oap_hdr_encode(struct oap_hdr *    hdr,
+                        void *              pkp,
+                        void *              crt,
+                        struct sec_config * scfg,
+                        buffer_t            rsp_tag,
+                        int                 req_md_nid,
+                        const uint8_t *     seal_key,
+                        int                 flags);
 
-int  oap_hdr_decode(struct oap_hdr * hdr,
-                    buffer_t         buf,
-                    int              req_md_nid,
-                    bool             rekey);
+int      oap_hdr_decode(struct oap_hdr * hdr,
+                        buffer_t         buf,
+                        int              req_md_nid,
+                        bool             rekey);
 
 /* Decrypt a sealed response identity block; fills data, crt and sig. */
-int  oap_hdr_unseal(struct oap_hdr * hdr,
-                    const uint8_t *  key);
+int      oap_hdr_unseal(struct oap_hdr * hdr,
+                        const uint8_t *  key);
 
-void debug_oap_hdr_rcv(const struct oap_hdr * hdr);
+void     debug_oap_hdr_rcv(const struct oap_hdr * hdr);
 
-void debug_oap_hdr_snd(const struct oap_hdr * hdr);
+void     debug_oap_hdr_snd(const struct oap_hdr * hdr);
 
-int  oap_hdr_copy_data(const struct oap_hdr * hdr,
-                       buffer_t *             out);
+int      oap_hdr_copy_data(const struct oap_hdr * hdr,
+                           buffer_t *             out);
 
 #endif /* OUROBOROS_IRMD_OAP_HDR_H */

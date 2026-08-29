@@ -81,9 +81,9 @@ int mock_load_credentials(void ** pkp,
 }
 
 /* Stub KEM functions - ECDSA tests don't use KEM */
-int load_server_kem_keypair(__attribute__((unused)) const char * name,
-                            __attribute__((unused)) bool         raw_fmt,
-                            __attribute__((unused)) void **      pkp)
+int load_server_kem_keypair(__attribute__((unused)) const char *        name,
+                            __attribute__((unused)) struct sec_config * cfg,
+                            __attribute__((unused)) void **             pkp)
 {
         return -1;
 }

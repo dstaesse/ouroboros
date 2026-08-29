@@ -65,8 +65,12 @@
 #define NID_MLKEM512           1454
 #define NID_MLKEM768           1455
 #define NID_MLKEM1024          1456
-#define NID_X25519MLKEM768     2053 /* !! not in OpenSSL   */
-#define NID_X448MLKEM1024      2054 /* !! not in OpenSSL   */
+
+/* Hybrid KEM NIDs: project-assigned range, OpenSSL defines none */
+#define NID_X25519MLKEM768     2053
+#define NID_X448MLKEM1024      2054
+#define NID_HYBRID_KEM_MIN     NID_X25519MLKEM768
+#define NID_HYBRID_KEM_MAX     NID_X448MLKEM1024
 
 /* KDF NIDs (match OpenSSL values) */
 #define NID_hkdf               1036
@@ -85,15 +89,8 @@
 #define IS_KEM_ALGORITHM(algo) \
         (strstr(algo, "ML-KEM") != NULL || strstr(algo, "MLKEM") != NULL)
 
-#define IS_HYBRID_KEM(algo) \
-        ((strstr(algo, "X25519") != NULL || strstr(algo, "X448") != NULL) && \
-         strstr(algo, "MLKEM") != NULL)
-
-#define X25519MLKEM768_PKSZ   1216  /* 32 + 1184 */
-#define X25519MLKEM768_CTSZ   1120  /* 32 + 1088 */
-#define X25519MLKEM768_SKSZ   2432  /* 32 + 2400 */
-#define X448MLKEM1024_PKSZ    1624  /* 56 + 1568 */
-#define X448MLKEM1024_SKSZ    3224  /* 56 + 3168 */
+#define IS_HYBRID_KEM_NID(nid) kex_nid_is_hybrid(nid)
+#define IS_HYBRID_KEM(algo)    kex_nid_is_hybrid(kex_str_to_nid(algo))
 
 #define CRYPT_KEY_BUFSZ       4096  /* Safe buffer for key material */
 
@@ -268,10 +265,11 @@ ssize_t            kex_kem_encap(buffer_t  pk,
                                  int       kdf_nid,
                                  uint8_t * s);
 
-ssize_t            kex_kem_encap_raw(buffer_t  pk,
-                                     uint8_t * ct,
-                                     int       kdf_nid,
-                                     uint8_t * s);
+ssize_t            kex_kem_encap_raw(const char * algo,
+                                     buffer_t     pk,
+                                     uint8_t *    ct,
+                                     int          kdf_nid,
+                                     uint8_t *    s);
 
 int                kex_kem_decap(void *    pkp,
                                  buffer_t  ct,
@@ -281,12 +279,11 @@ int                kex_kem_decap(void *    pkp,
 int                kex_get_algo_from_pk_der(buffer_t pk,
                                             char *   algo);
 
-int                kex_get_algo_from_pk_raw(buffer_t pk,
-                                            char *   algo);
-
 int                kex_validate_algo(const char * algo);
 
 int                kex_validate_nid(int nid);
+
+bool               kex_nid_is_hybrid(uint16_t nid);
 
 const char *       kex_nid_to_str(uint16_t nid);
 
@@ -393,9 +390,11 @@ int                crypt_load_pubkey_file_to_der(const char * path,
                                                  buffer_t *   buf);
 
 int                crypt_load_pubkey_raw_file(const char * path,
+                                              const char * algo,
                                               buffer_t *   buf);
 
 int                crypt_load_privkey_raw_file(const char * path,
+                                               const char * algo,
                                                void **      key);
 
 int                crypt_ct_cmp(const void * a,

@@ -220,7 +220,7 @@ static int test_kex_kem(const char * algo)
         pk.data = buf1;
 
         if (IS_HYBRID_KEM(algo))
-                ct_len = kex_kem_encap_raw(pk, buf2, kdf, s1);
+                ct_len = kex_kem_encap_raw(algo, pk, buf2, kdf, s1);
         else
                 ct_len = kex_kem_encap(pk, buf2, kdf, s1);
 
@@ -285,7 +285,7 @@ static int test_kex_kem_corrupted_ciphertext(const char * algo)
         pk.data = buf1;
 
         if (IS_HYBRID_KEM(algo))
-                ct_len = kex_kem_encap_raw(pk, buf2, kdf, s1);
+                ct_len = kex_kem_encap_raw(algo, pk, buf2, kdf, s1);
         else
                 ct_len = kex_kem_encap(pk, buf2, kdf, s1);
 
@@ -360,7 +360,7 @@ static int test_kex_kem_wrong_keypair(const char * algo)
         }
 
         if (IS_HYBRID_KEM(algo))
-                ct_len = kex_kem_encap_raw(pk1, buf3, NID_sha256, s1);
+                ct_len = kex_kem_encap_raw(algo, pk1, buf3, NID_sha256, s1);
         else
                 ct_len = kex_kem_encap(pk1, buf3, NID_sha256, s1);
 
@@ -422,7 +422,7 @@ static int test_kex_kem_truncated_ciphertext(const char * algo)
         pk.data = buf1;
 
         if (IS_HYBRID_KEM(algo))
-                ct_len = kex_kem_encap_raw(pk, buf2, NID_sha256, s1);
+                ct_len = kex_kem_encap_raw(algo, pk, buf2, NID_sha256, s1);
         else
                 ct_len = kex_kem_encap(pk, buf2, NID_sha256, s1);
 
