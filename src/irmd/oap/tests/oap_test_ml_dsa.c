@@ -720,6 +720,51 @@ static int test_oap_kem_srv_uncfg_all(void)
         return ret;
 }
 
+/* Client encap must be rejected when the server has no KEX config */
+static int test_oap_kem_cli_encap_srv_uncfg(void)
+{
+        struct oap_test_ctx ctx;
+
+        memset(&test_cfg, 0, sizeof(test_cfg));
+
+        /* Server: auth only, no KEX configured */
+
+        test_cfg.srv.auth = true;
+
+        /* Client: requests KEM with client-side encapsulation */
+        test_cfg.cli.kex      = NID_MLKEM768;
+        test_cfg.cli.cipher   = NID_aes_256_gcm;
+        test_cfg.cli.kdf      = get_random_kdf();
+        test_cfg.cli.kem_mode = CLI_ENCAP;
+        test_cfg.cli.auth     = false;
+
+        TEST_START();
+
+        if (oap_test_setup_kem(&ctx, root_ca_crt_ml, im_ca_crt_ml) < 0)
+                goto fail;
+
+        if (oap_cli_prepare_ctx(&ctx) < 0) {
+                printf("Client prepare failed.\n");
+                goto fail_cleanup;
+        }
+
+        if (oap_srv_process_ctx(&ctx) == 0) {
+                printf("Server accepted client encap without KEX.\n");
+                goto fail_cleanup;
+        }
+
+        oap_test_teardown_kem(&ctx);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_cleanup:
+        oap_test_teardown_kem(&ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 int oap_test_ml_dsa(int    argc,
                     char **argv)
 {
@@ -736,6 +781,7 @@ int oap_test_ml_dsa(int    argc,
         ret |= test_oap_roundtrip_kem_all();
 
         ret |= test_oap_kem_srv_uncfg_all();
+        ret |= test_oap_kem_cli_encap_srv_uncfg();
 
         ret |= test_oap_corrupted_request();
         ret |= test_oap_corrupted_response();
@@ -765,6 +811,7 @@ int oap_test_ml_dsa(int    argc,
         (void) test_oap_rekey_kem_forcing;
         (void) test_oap_kem_srv_uncfg;
         (void) test_oap_kem_srv_uncfg_all;
+        (void) test_oap_kem_cli_encap_srv_uncfg;
         (void) test_oap_corrupted_request;
         (void) test_oap_corrupted_response;
         (void) test_oap_truncated_request;

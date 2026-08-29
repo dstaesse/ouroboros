@@ -363,6 +363,10 @@ int do_server_kex(const struct name_info * info,
                                    scfg->x.str);
                         return -ECRYPT;
                 }
+        } else if (!IS_KEX_ALGO_SET(scfg)) {
+                /* Client encap decaps with the configured static key */
+                log_err_id(id, "Client encap without configured KEX.");
+                return -ECRYPT;
         }
 
         /* Dispatch based on algorithm type */
