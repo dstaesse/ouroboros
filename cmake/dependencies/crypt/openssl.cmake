@@ -53,4 +53,11 @@ else()
   unset(HAVE_SLH CACHE)
 endif()
 
+if(OPENSSL_VERSION VERSION_GREATER_EQUAL "4.1.0")
+  set(HAVE_OPENSSL_4_1 TRUE CACHE INTERNAL
+    "OpenSSL 4.1 or later")
+else()
+  unset(HAVE_OPENSSL_4_1 CACHE)
+endif()
+
 # Secure memory options are in cmake/config/global.cmake

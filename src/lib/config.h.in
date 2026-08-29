@@ -35,6 +35,7 @@
 #ifdef HAVE_OPENSSL
 #cmakedefine HAVE_ML
 #cmakedefine HAVE_SLH
+#cmakedefine HAVE_OPENSSL_4_1
 #define HAVE_ENCRYPTION
 #define SECMEM_MINSIZE           @SECMEM_MINSIZE@
 #endif

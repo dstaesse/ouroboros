@@ -48,6 +48,7 @@
 #include <openssl/x509_vfy.h>
 
 #include <assert.h>
+#include <limits.h>
 #include <stdio.h>
 
 #define IS_EC_GROUP(str) (strcmp(str, "EC") == 0)
@@ -1608,12 +1609,26 @@ void openssl_free_key(EVP_PKEY * key)
         EVP_PKEY_free(key);
 }
 
+/* ASN1_STRING_length is deprecated in OpenSSL 4.1, and returns size_t */
+static int ossl_asn1_str_len(const ASN1_STRING * val)
+{
+#ifdef HAVE_OPENSSL_4_1
+        size_t len;
+
+        len = ASN1_STRING_get_length(val);
+
+        return len > INT_MAX ? -1 : (int) len;
+#else
+        return ASN1_STRING_length(val);
+#endif
+}
+
 int openssl_check_crt_name(void *       crt,
                            const char * name)
 {
         const unsigned char * cn;
-        ASN1_STRING *         val;
-        X509_NAME *           nm;
+        const ASN1_STRING *   val;
+        const X509_NAME *     nm;
         int                   idx;
         int                   len;
 
@@ -1627,7 +1642,7 @@ int openssl_check_crt_name(void *       crt,
 
         val = X509_NAME_ENTRY_get_data(X509_NAME_get_entry(nm, idx));
         cn  = ASN1_STRING_get0_data(val);
-        len = ASN1_STRING_length(val);
+        len = ossl_asn1_str_len(val);
 
         if (len < 0 || (size_t) len != strlen(name))
                 return -1;
@@ -1645,8 +1660,8 @@ int openssl_get_crt_name(void * crt,
                          char * name)
 {
         const unsigned char * cn;
-        ASN1_STRING *         val;
-        X509_NAME *           nm;
+        const ASN1_STRING *   val;
+        const X509_NAME *     nm;
         int                   idx;
         int                   len;
 
@@ -1660,7 +1675,7 @@ int openssl_get_crt_name(void * crt,
 
         val = X509_NAME_ENTRY_get_data(X509_NAME_get_entry(nm, idx));
         cn  = ASN1_STRING_get0_data(val);
-        len = ASN1_STRING_length(val);
+        len = ossl_asn1_str_len(val);
 
         if (len < 0)
                 return -1;
