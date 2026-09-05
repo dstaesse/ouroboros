@@ -111,6 +111,7 @@ struct nb {
 
 struct {
         uint64_t          addr;
+        uint64_t          seqno; /* Own LSA origination counter. */
 
         enum routing_algo routing_algo;
 
@@ -480,6 +481,65 @@ static void lsdb_graph_unlink(struct adjacency * adj)
                 log_warn("Failed to remove link from graph.");
 }
 
+/* Finds the adjacency, or the sorted position to insert. */
+static struct adjacency * find_adjacency(uint64_t            src,
+                                         uint64_t            dst,
+                                         struct list_head ** pos)
+{
+        struct list_head * p;
+
+        llist_for_each(p, &ls.db) {
+                struct adjacency * a = list_entry(p, struct adjacency, next);
+
+                if (a->dst == dst && a->src == src) {
+                        *pos = p;
+                        return a;
+                }
+
+                if (a->dst > dst || (a->dst == dst && a->src > src))
+                        break;
+        }
+
+        *pos = p;
+
+        return NULL;
+}
+
+/* Adopts a newer LSA; ls.lock is held. */
+static int update_adjacency(struct adjacency * adj,
+                            uint64_t           seqno,
+                            time_t             stamp)
+{
+        if (adj->seqno >= seqno)
+                return -1;
+
+        adj->stamp = stamp;
+        adj->seqno = seqno;
+
+        return 0;
+}
+
+/* Inserts an adjacency at pos; ls.lock is held. */
+static struct adjacency * add_adjacency(uint64_t           src,
+                                        uint64_t           dst,
+                                        struct list_head * pos)
+{
+        struct adjacency * adj;
+
+        adj = malloc(sizeof(*adj));
+        if (adj == NULL)
+                return NULL;
+
+        adj->src   = src;
+        adj->dst   = dst;
+        adj->seqno = 0;
+        adj->stamp = 0;
+
+        llist_add_tail_at(&adj->next, pos, &ls.db);
+
+        return adj;
+}
+
 static int lsdb_add_link(uint64_t    src,
                          uint64_t    dst,
                          uint64_t    seqno,
@@ -488,7 +548,7 @@ static int lsdb_add_link(uint64_t    src,
         struct list_head * p;
         struct adjacency * adj;
         struct timespec    now;
-        int                ret = -1;
+        int                ret;
 
         assert(qs);
 
@@ -496,34 +556,23 @@ static int lsdb_add_link(uint64_t    src,
 
         pthread_rwlock_wrlock(&ls.lock);
 
-        llist_for_each(p, &ls.db) {
-                struct adjacency * a = list_entry(p, struct adjacency, next);
-                if (a->dst == dst && a->src == src) {
-                        if (a->seqno < seqno) {
-                                a->stamp = now.tv_sec;
-                                a->seqno = seqno;
-                                ret = 0;
-                        }
-                        pthread_rwlock_unlock(&ls.lock);
-                        return ret;
-                }
+        adj = find_adjacency(src, dst, &p);
+        if (adj != NULL) {
+                ret = update_adjacency(adj, seqno, now.tv_sec);
 
-                if (a->dst > dst || (a->dst == dst && a->src > src))
-                        break;
+                pthread_rwlock_unlock(&ls.lock);
+
+                return ret;
         }
 
-        adj = malloc(sizeof(*adj));
+        adj = add_adjacency(src, dst, p);
         if (adj == NULL) {
                 pthread_rwlock_unlock(&ls.lock);
                 return -ENOMEM;
         }
 
-        adj->dst   = dst;
-        adj->src   = src;
         adj->seqno = seqno;
         adj->stamp = now.tv_sec;
-
-        llist_add_tail_at(&adj->next, p, &ls.db);
 
         lsdb_graph_link(adj, qs);
 
@@ -538,26 +587,26 @@ static int lsdb_del_link(uint64_t src,
                          uint64_t dst)
 {
         struct list_head * p;
-        struct list_head * h;
+        struct adjacency * adj;
 
         pthread_rwlock_wrlock(&ls.lock);
 
-        llist_for_each_safe(p, h, &ls.db) {
-                struct adjacency * a = list_entry(p, struct adjacency, next);
-                if (a->dst == dst && a->src == src) {
-                        llist_del(&a->next, &ls.db);
-                        lsdb_graph_unlink(a);
-
-                        pthread_rwlock_unlock(&ls.lock);
-                        set_pff_modified(false);
-                        free(a);
-                        return 0;
-                }
+        adj = find_adjacency(src, dst, &p);
+        if (adj == NULL) {
+                pthread_rwlock_unlock(&ls.lock);
+                return -EPERM;
         }
+
+        llist_del(&adj->next, &ls.db);
+        lsdb_graph_unlink(adj);
 
         pthread_rwlock_unlock(&ls.lock);
 
-        return -EPERM;
+        set_pff_modified(false);
+
+        free(adj);
+
+        return 0;
 }
 
 static void * periodic_recalc_pff(void * o)
@@ -690,30 +739,85 @@ static void flood_lsms(struct list_head * q)
         free(nbs);
 }
 
-static void send_lsm(uint64_t src,
-                     uint64_t dst,
-                     uint64_t seqno)
-{
-        struct list_head q;
-
-        list_head_init(&q);
-
-        if (queue_lsm(&q, src, dst, seqno) < 0) {
-                log_warn("Failed to queue LSM.");
-                return;
-        }
-
-        flood_lsms(&q);
-}
-
 /* Re-originates an own link; ls.lock is held. */
 static void originate(struct adjacency * adj,
                       struct list_head * q)
 {
-        adj->seqno++;
-
+        adj->seqno = ++ls.seqno;
         if (queue_lsm(q, adj->src, adj->dst, adj->seqno) < 0)
                 log_warn("Failed to queue LSM.");
+}
+
+/* Adds or refreshes an own link and floods it. */
+static int lsdb_add_own_link(uint64_t    dst,
+                             qosspec_t * qs)
+{
+        struct list_head   q;
+        struct list_head * p;
+        struct adjacency * adj;
+        struct timespec    now;
+        bool               added = false;
+
+        list_head_init(&q);
+
+        clock_gettime(CLOCK_REALTIME_COARSE, &now);
+
+        pthread_rwlock_wrlock(&ls.lock);
+
+        adj = find_adjacency(ls.addr, dst, &p);
+        if (adj == NULL) {
+                adj = add_adjacency(ls.addr, dst, p);
+                if (adj == NULL) {
+                        pthread_rwlock_unlock(&ls.lock);
+                        return -ENOMEM;
+                }
+
+                added = true;
+        }
+
+        originate(adj, &q);
+
+        adj->stamp = now.tv_sec;
+
+        if (added)
+                lsdb_graph_link(adj, qs);
+
+        pthread_rwlock_unlock(&ls.lock);
+
+        flood_lsms(&q);
+
+        if (added)
+                set_pff_modified(true);
+
+        return 0;
+}
+
+/* A peer holds a newer copy of an own link: outrank it and re-originate. */
+static void lsdb_reclaim_link(uint64_t dst,
+                              uint64_t seqno)
+{
+        struct list_head   q;
+        struct list_head * p;
+        struct adjacency * adj;
+
+        list_head_init(&q);
+
+        pthread_rwlock_wrlock(&ls.lock);
+
+        adj = find_adjacency(ls.addr, dst, &p);
+        if (adj == NULL || seqno <= adj->seqno) {
+                pthread_rwlock_unlock(&ls.lock);
+                return;
+        }
+
+        if (seqno > ls.seqno)
+                ls.seqno = seqno;
+
+        originate(adj, &q);
+
+        pthread_rwlock_unlock(&ls.lock);
+
+        flood_lsms(&q);
 }
 
 /* replicate the lsdb to a mgmt neighbor */
@@ -871,6 +975,7 @@ static void cleanup_fqueue(void * fq)
         fqueue_destroy((fqueue_t *) fq);
 }
 
+/* Only the origin speaks for its own links; a peer's copy is not relayed. */
 static void * lsreader(void * o)
 {
         fqueue_t * fq;
@@ -915,9 +1020,12 @@ static void * lsreader(void * o)
                                   LSU_VAL(msg.s_addr, msg.d_addr, msg.seqno),
                                   ADDR_VAL32(&ls.addr));
 #endif
-                        if (lsdb_add_link(msg.s_addr,
-                                          msg.d_addr,
-                                          msg.seqno,
+                        if (msg.s_addr == ls.addr) {
+                                lsdb_reclaim_link(msg.d_addr, msg.seqno);
+                                continue;
+                        }
+
+                        if (lsdb_add_link(msg.s_addr, msg.d_addr, msg.seqno,
                                           &qs))
                                 continue;
 
@@ -967,12 +1075,10 @@ static void handle_event(void *       self,
 
         switch (event) {
         case NOTIFY_DT_CONN_ADD:
-                send_lsm(ls.addr, c->conn_info.addr, 0);
-
                 if (lsdb_add_nb(c->conn_info.addr, c->flow_info.fd, NB_DT))
                         log_dbg("Failed to add neighbor to lsdb.");
 
-                if (lsdb_add_link(ls.addr, c->conn_info.addr, 0, &qs))
+                if (lsdb_add_own_link(c->conn_info.addr, &qs) < 0)
                         log_dbg("Failed to add new adjacency to lsdb.");
                 break;
         case NOTIFY_DT_CONN_DEL:
@@ -990,7 +1096,7 @@ static void handle_event(void *       self,
         case NOTIFY_DT_CONN_UP:
                 flow_event(c->flow_info.fd, true);
 
-                if (lsdb_add_link(ls.addr, c->conn_info.addr, 0, &qs) < 0)
+                if (lsdb_add_own_link(c->conn_info.addr, &qs) < 0)
                         log_dbg("Failed to re-add adjacency to lsdb.");
                 break;
         case NOTIFY_DT_CONN_DOWN:
