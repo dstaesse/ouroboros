@@ -584,32 +584,136 @@ static void * periodic_recalc_pff(void * o)
         return (void *) 0;
 }
 
+static int write_lsm(int                      fd,
+                     const struct adjacency * adj)
+{
+        struct lsa lsm;
+
+        lsm.d_addr = hton64(adj->dst);
+        lsm.s_addr = hton64(adj->src);
+        lsm.seqno  = hton64(adj->seqno);
+
+        return flow_write(fd, &lsm, sizeof(lsm));
+}
+
+static int queue_lsm(struct list_head * q,
+                     uint64_t           src,
+                     uint64_t           dst,
+                     uint64_t           seqno)
+{
+        struct adjacency * lsm;
+
+        lsm = malloc(sizeof(*lsm));
+        if (lsm == NULL)
+                return -ENOMEM;
+
+        lsm->src   = src;
+        lsm->dst   = dst;
+        lsm->seqno = seqno;
+
+        list_add_tail(&lsm->next, q);
+
+        return 0;
+}
+
+static ssize_t snapshot_mgmt_nbs(struct nb ** nbs)
+{
+        struct list_head * p;
+        size_t             n = 0;
+        size_t             i = 0;
+
+        *nbs = NULL;
+
+        pthread_rwlock_rdlock(&ls.lock);
+
+        llist_for_each(p, &ls.nbs)
+                if (list_entry(p, struct nb, next)->type == NB_MGMT)
+                        ++n;
+
+        if (n == 0) {
+                pthread_rwlock_unlock(&ls.lock);
+                return 0;
+        }
+
+        *nbs = malloc(sizeof(**nbs) * n);
+        if (*nbs == NULL) {
+                pthread_rwlock_unlock(&ls.lock);
+                return -ENOMEM;
+        }
+
+        llist_for_each(p, &ls.nbs) {
+                struct nb * nb = list_entry(p, struct nb, next);
+
+                if (nb->type == NB_MGMT)
+                        (*nbs)[i++] = *nb;
+        }
+
+        pthread_rwlock_unlock(&ls.lock);
+
+        return n;
+}
+
+static void flood_lsms(struct list_head * q)
+{
+        struct list_head * p;
+        struct list_head * h;
+        struct nb *        nbs;
+        ssize_t            n;
+        ssize_t            i;
+
+        n = snapshot_mgmt_nbs(&nbs);
+        if (n < 0)
+                log_warn("Failed to snapshot neighbors, dropping LSMs.");
+
+        list_for_each_safe(p, h, q) {
+                struct adjacency * lsm;
+
+                lsm = list_entry(p, struct adjacency, next);
+
+                for (i = 0; i < n; ++i) {
+                        if (write_lsm(nbs[i].fd, lsm) < 0)
+                                log_err("Failed to send LSM to " ADDR_FMT32,
+                                        ADDR_VAL32(&nbs[i].addr));
+#ifdef DEBUG_PROTO_LS
+                        else
+                                log_proto(LSU_FMT " --> " ADDR_FMT32,
+                                          LSU_VAL(lsm->src, lsm->dst,
+                                                  lsm->seqno),
+                                          ADDR_VAL32(&nbs[i].addr));
+#endif
+                }
+
+                list_del(&lsm->next);
+                free(lsm);
+        }
+
+        free(nbs);
+}
+
 static void send_lsm(uint64_t src,
                      uint64_t dst,
                      uint64_t seqno)
 {
-        struct lsa         lsm;
-        struct list_head * p;
+        struct list_head q;
 
-        lsm.d_addr = hton64(dst);
-        lsm.s_addr = hton64(src);
-        lsm.seqno  = hton64(seqno);
+        list_head_init(&q);
 
-        llist_for_each(p, &ls.nbs) {
-                struct nb * nb = list_entry(p, struct nb, next);
-                if (nb->type != NB_MGMT)
-                        continue;
-
-                if (flow_write(nb->fd, &lsm, sizeof(lsm)) < 0)
-                        log_err("Failed to send LSM to " ADDR_FMT32,
-                                ADDR_VAL32(&nb->addr));
-#ifdef DEBUG_PROTO_LS
-                else
-                        log_proto(LSU_FMT " --> " ADDR_FMT32,
-                                LSU_VAL(src, dst, seqno),
-                                ADDR_VAL32(&nb->addr));
-#endif
+        if (queue_lsm(&q, src, dst, seqno) < 0) {
+                log_warn("Failed to queue LSM.");
+                return;
         }
+
+        flood_lsms(&q);
+}
+
+/* Re-originates an own link; ls.lock is held. */
+static void originate(struct adjacency * adj,
+                      struct list_head * q)
+{
+        adj->seqno++;
+
+        if (queue_lsm(q, adj->src, adj->dst, adj->seqno) < 0)
+                log_warn("Failed to queue LSM.");
 }
 
 /* replicate the lsdb to a mgmt neighbor */
@@ -644,15 +748,13 @@ static void lsdb_replicate(int fd)
         pthread_rwlock_unlock(&ls.lock);
 
         list_for_each_safe(p, h, &copy) {
-                struct lsa         lsm;
                 struct adjacency * adj;
+
                 adj = list_entry(p, struct adjacency, next);
-                lsm.d_addr = hton64(adj->dst);
-                lsm.s_addr = hton64(adj->src);
-                lsm.seqno  = hton64(adj->seqno);
+
                 list_del(&adj->next);
+                write_lsm(fd, adj);
                 free(adj);
-                flow_write(fd, &lsm, sizeof(lsm));
         }
 }
 
@@ -660,11 +762,14 @@ static void * lsupdate(void * o)
 {
         struct list_head * p;
         struct list_head * h;
+        struct list_head   q;
         struct timespec    now;
 
         (void) o;
 
         while (true) {
+                list_head_init(&q);
+
                 clock_gettime(CLOCK_REALTIME_COARSE, &now);
 
                 pthread_rwlock_wrlock(&ls.lock);
@@ -684,13 +789,15 @@ static void * lsupdate(void * o)
                         }
 
                         if (adj->src == ls.addr) {
-                                adj->seqno++;
-                                send_lsm(adj->src, adj->dst, adj->seqno);
+                                originate(adj, &q);
+
                                 adj->stamp = now.tv_sec;
                         }
                 }
 
                 pthread_cleanup_pop(true);
+
+                flood_lsms(&q);
 
                 sleep(ls.conf.t_update);
         }
@@ -860,12 +967,7 @@ static void handle_event(void *       self,
 
         switch (event) {
         case NOTIFY_DT_CONN_ADD:
-                pthread_rwlock_rdlock(&ls.lock);
-
-                pthread_cleanup_push(__cleanup_rwlock_unlock, &ls.lock);
-
                 send_lsm(ls.addr, c->conn_info.addr, 0);
-                pthread_cleanup_pop(true);
 
                 if (lsdb_add_nb(c->conn_info.addr, c->flow_info.fd, NB_DT))
                         log_dbg("Failed to add neighbor to lsdb.");
