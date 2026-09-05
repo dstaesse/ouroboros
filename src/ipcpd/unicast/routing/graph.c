@@ -151,7 +151,7 @@ static struct vertex * add_vertex(struct graph * graph,
         llist_add_tail_at(&vertex->next, p, &graph->vertices);
 
         /* Increase the index of the vertices to the right. */
-        list_for_each(p, &vertex->next) {
+        llist_for_each(p, &graph->vertices) {
                 struct vertex * v = list_entry(p, struct vertex, next);
                 if (v->addr > addr)
                         v->index++;
