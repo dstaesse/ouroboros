@@ -44,6 +44,10 @@ struct ipcp_ops {
                               const struct poa_addr * addr,
                               struct layer_info *     info);
 
+        /* Called after the flags are stored; NULL if nothing reacts. */
+        void  (* ipcp_set_flags)(uint32_t flags,
+                                 uint32_t changed);
+
         int   (* ipcp_connect)(const char *            dst,
                                const char *            component,
                                qosspec_t               qs,
@@ -90,6 +94,8 @@ void            ipcp_stop(void);
 void            ipcp_fini(void);
 
 enum ipcp_type  ipcp_get_type(void);
+
+uint32_t        ipcp_get_flags(void);
 
 const char *    ipcp_get_name(void);
 

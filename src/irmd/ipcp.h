@@ -49,6 +49,10 @@ int     ipcp_connect(pid_t                   pid,
                      qosspec_t               qs,
                      const struct poa_addr * addr);
 
+int     ipcp_set_flags(pid_t    pid,
+                       uint32_t flags,
+                       uint32_t mask);
+
 int     ipcp_disconnect(pid_t        pid,
                         const char * dst,
                         const char * component);

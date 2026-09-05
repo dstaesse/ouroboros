@@ -45,6 +45,7 @@
 #include "common/comp.h"
 #include "common/connmgr.h"
 #include "dt.h"
+#include "ipcp.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -161,15 +162,35 @@ static void dt_packet(uint8_t * buf,
                       int       in_fd)
 {
         struct list_head * p;
+        bool               relay;
+
+        relay = ipcp_get_flags() & IPCP_FLAG_TRANSIT;
 
         pthread_rwlock_rdlock(&fwd.lock);
 
         pthread_cleanup_push(__cleanup_rwlock_unlock, &fwd.lock);
 
+        if (!relay) {
+                llist_for_each(p, &fwd.nbs) {
+                        struct nb * nb = list_entry(p, struct nb, next);
+
+                        if (nb->fd == in_fd) {
+                                relay = nb->np1;
+                                break;
+                        }
+                }
+        }
+
         llist_for_each(p, &fwd.nbs) {
                 struct nb * nb = list_entry(p, struct nb, next);
-                if (nb->fd != in_fd)
-                        flow_write(nb->fd, buf, len); /* FIXME: avoid copy. */
+
+                if (nb->fd == in_fd)
+                        continue;
+
+                if (!relay && !nb->np1)
+                        continue;
+
+                flow_write(nb->fd, buf, len); /* FIXME: avoid copy. */
         }
 
         pthread_cleanup_pop(true);

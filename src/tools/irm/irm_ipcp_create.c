@@ -52,8 +52,10 @@ static void usage(void)
 {
         printf("Usage: irm ipcp create\n"
                "                name <ipcp name>\n"
-               "                type [TYPE]\n\n"
-               "where TYPE in {" UNICAST " " BROADCAST " " LOCAL "}\n");
+               "                type [TYPE]\n"
+               "                [transit [on|off] (default: on)]\n\n"
+               "where TYPE in {" UNICAST " " BROADCAST " " LOCAL "}\n"
+               "transit off is not valid for " LOCAL " IPCPs.\n");
 }
 
 int do_create_ipcp(int     argc,
@@ -62,13 +64,22 @@ int do_create_ipcp(int     argc,
         char *         ipcp_type = NULL;
         char *         ipcp_name = NULL;
         enum ipcp_type type      = 0;
+        uint32_t       flags     = IPCP_FLAG_TRANSIT;
         pid_t          pid;
 
         while (argc > 0) {
+                if (argc < 2) {
+                        usage();
+                        return -1;
+                }
+
                 if (matches(*argv, "type") == 0) {
                         ipcp_type = *(argv + 1);
                 } else if (matches(*argv, "name") == 0) {
                         ipcp_name = *(argv + 1);
+                } else if (matches(*argv, "transit") == 0) {
+                        if (transit_value(*(argv + 1), &flags) < 0)
+                                return -1;
                 } else {
                         printf("\"%s\" is unknown, try \"irm "
                                "ipcp create\".\n", *argv);
@@ -96,7 +107,7 @@ int do_create_ipcp(int     argc,
                 return -1;
         }
 
-        pid = irm_create_ipcp(ipcp_name, type);
+        pid = irm_create_ipcp(ipcp_name, type, flags);
         if (pid < 0)
                 return -1;
 

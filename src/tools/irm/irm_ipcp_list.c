@@ -127,21 +127,19 @@ int do_list_ipcp(int     argc,
         (void) ipcp_name;
 
         printf("+---------+----------------------+------------+"
-               "----------------------+\n");
-        printf("| %7s | %20s | %10s | %20s |\n", "pid", "name",
-               "type", "layer");
+               "----------------------+---------+\n");
+        printf("| %7s | %20s | %10s | %20s | %7s |\n", "pid", "name",
+               "type", "layer", "transit");
         printf("+---------+----------------------+------------+"
-               "----------------------+\n");
+               "----------------------+---------+\n");
 
         for (i = 0; i < len; i++)
-                printf("| %7d | %20s | %10s | %20s |\n",
-                       ipcps[i].pid,
-                       ipcps[i].name,
-                       str_type(ipcps[i].type),
-                       ipcps[i].layer);
+                printf("| %7d | %20s | %10s | %20s | %7s |\n", ipcps[i].pid,
+                       ipcps[i].name, str_type(ipcps[i].type), ipcps[i].layer,
+                       (ipcps[i].flags & IPCP_FLAG_TRANSIT) ? "on" : "off");
 
         printf("+---------+----------------------+------------+"
-               "----------------------+\n\n");
+               "----------------------+---------+\n\n");
 
         free(ipcps);
 

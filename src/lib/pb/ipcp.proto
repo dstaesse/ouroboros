@@ -43,6 +43,7 @@ enum ipcp_msg_code {
         IPCP_ATTACH          = 14;
         IPCP_DETACH          = 15;
         IPCP_LIST_POAS  = 16;
+        IPCP_SET_FLAGS       = 17;
 }
 
 message ipcp_msg {
@@ -65,4 +66,6 @@ message ipcp_msg {
         optional bool is_poa               = 17; /* flow rides a PoA       */
         optional poa_spec_msg poa          = 18; /* PoA to attach          */
         repeated poa_spec_msg poas         = 19; /* PoAs attached          */
+        optional uint32 flags              = 20; /* IPCP flag values       */
+        optional uint32 mask               = 21; /* IPCP flags to set      */
 }

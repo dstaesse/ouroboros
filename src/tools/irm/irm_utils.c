@@ -103,6 +103,27 @@ int matches(const char * cmd,
         return memcmp(pattern, cmd, len);
 }
 
+int transit_value(const char * arg,
+                  uint32_t *   flags)
+{
+        if (arg == NULL)
+                return -1;
+
+        if (strcmp(arg, "on") == 0) {
+                *flags |= IPCP_FLAG_TRANSIT;
+                return 0;
+        }
+
+        if (strcmp(arg, "off") == 0) {
+                *flags &= ~IPCP_FLAG_TRANSIT;
+                return 0;
+        }
+
+        printf("Invalid transit value \"%s\".\n", arg);
+
+        return -1;
+}
+
 int wildcard_match(const char * pattern,
                    const char * string)
 {

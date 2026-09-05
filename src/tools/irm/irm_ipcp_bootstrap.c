@@ -85,6 +85,7 @@ static char * usage_str = \
         "        [hash [ALGORITHM] (default: %s)]\n"
         "        [routing <ROUTING_POLICY> (default: %s)]\n"
         "        [congestion <CONG_POLICY> (default: %s)]\n"
+        "        [transit [on|off] (default: on)]\n"
         "        [autobind]\n\n"
         "where ADDRESS_POLICY in {" FLAT_RANDOM "}\n"
         "    DIRECTORY_POLICY in {" DHT_DIR "}\n"
@@ -157,10 +158,13 @@ int do_bootstrap_ipcp(int     argc,
         ssize_t                 len            = 0;
         int                     i              = 0;
         bool                    autobind       = false;
+        uint32_t                flags          = IPCP_FLAG_TRANSIT;
+        uint32_t                mask           = 0;
         int                     cargs;
 
         while (argc > 0) {
                 cargs = 2;
+
                 if (matches(*argv, "autobind") == 0)
                         cargs = 1;
 
@@ -186,6 +190,9 @@ int do_bootstrap_ipcp(int     argc,
                                 hash_algo = DIR_HASH_SHA3_512;
                         else
                                 goto unknown_param;
+                } else if (matches(*argv, "autobind") == 0) {
+                        autobind = true;
+                        cargs = 1;
                 } else if (matches(*argv, "addr") == 0) {
                         addr_size = atoi(*(argv + 1));
                 } else if (matches(*argv, "eid") == 0) {
@@ -194,9 +201,10 @@ int do_bootstrap_ipcp(int     argc,
                         max_ttl = atoi(*(argv + 1));
                 } else if (matches(*argv, "rtt") == 0) {
                         max_rtt = atoi(*(argv + 1));
-                } else if (matches(*argv, "autobind") == 0) {
-                        autobind = true;
-                        cargs = 1;
+                } else if (matches(*argv, "transit") == 0) {
+                        if (transit_value(*(argv + 1), &flags) < 0)
+                                goto fail_usage;
+                        mask = IPCP_FLAG_TRANSIT;
                 } else if (matches(*argv, "addr_auth") == 0) {
                         if (strcmp(FLAT_RANDOM, *(argv + 1)) == 0)
                                 addr_auth_type = ADDR_AUTH_FLAT_RANDOM;
@@ -282,7 +290,7 @@ int do_bootstrap_ipcp(int     argc,
                         goto fail;
                 }
 
-                pid = irm_create_ipcp(ipcp, type);
+                pid = irm_create_ipcp(ipcp, type, flags);
                 if (pid < 0)
                         goto fail;
                 free(ipcps);
@@ -299,8 +307,12 @@ int do_bootstrap_ipcp(int     argc,
 
                         conf.type = ipcps[i].type;
 
-                        if (autobind && (conf.type != IPCP_UNICAST &&
-                                         conf.type != IPCP_BROADCAST)) {
+                        if (mask && irm_set_ipcp_flags(pid, flags, mask) < 0) {
+                                printf("Failed to set transit on %s.\n", ipcp);
+                                goto fail;
+                        }
+
+                        if (autobind && conf.type == IPCP_LOCAL) {
                                 printf("Can not bind this IPCP type,"
                                        "autobind disabled.\n\n");
                                 autobind = false;

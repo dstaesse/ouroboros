@@ -33,6 +33,8 @@ int                link_state_init(struct ls_config * ls,
 
 void               link_state_fini(void);
 
+void               link_state_announce(void);
+
 int                link_state_start(void);
 
 void               link_state_stop(void);

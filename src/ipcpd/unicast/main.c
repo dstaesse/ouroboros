@@ -48,6 +48,7 @@
 #include "dt.h"
 #include "fa.h"
 #include "ipcp.h"
+#include "routing.h"
 
 #include <stdbool.h>
 #include <signal.h>
@@ -265,9 +266,19 @@ static int unicast_ipcp_query(const uint8_t * dst)
         return dir_query(dst) ? 0 : -1;
 }
 
+static void unicast_ipcp_set_flags(uint32_t flags,
+                                   uint32_t changed)
+{
+        (void) flags;
+
+        if (changed & IPCP_FLAG_TRANSIT)
+                routing_announce();
+}
+
 static struct ipcp_ops unicast_ops = {
         .ipcp_bootstrap       = unicast_ipcp_bootstrap,
         .ipcp_enroll          = unicast_ipcp_enroll,
+        .ipcp_set_flags       = unicast_ipcp_set_flags,
         .ipcp_connect         = connmgr_ipcp_connect,
         .ipcp_disconnect      = connmgr_ipcp_disconnect,
         .ipcp_reg             = dir_reg,

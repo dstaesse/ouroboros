@@ -852,11 +852,16 @@ static int toml_ipcp(toml_table_t *       table,
 {
         toml_datum_t   bootstrap;
         toml_datum_t   enrol;
+        toml_datum_t   transit;
         toml_table_t * enrol_tbl;
         bool           have_enrol;
         int            ret;
 
         log_dbg("Found IPCP %s in configuration file.", info->name);
+
+        transit = toml_bool_in(table, "transit");
+        if (transit.ok && !transit.u.b)
+                info->flags &= ~IPCP_FLAG_TRANSIT;
 
         if (create_ipcp(info) < 0) {
                 log_err("Failed to create IPCP %s.", info->name);
@@ -1000,8 +1005,11 @@ static int toml_ipcp_list(toml_table_t * table,
                         return -1;
                 }
 
-                info.type = type;
+                info.type  = type;
+                info.flags = IPCP_FLAG_TRANSIT;
+
                 strcpy(info.name, key);
+
                 conf.type = type;
 
                 ret = toml_ipcp(toml_table_in(table, key), &info, &conf);

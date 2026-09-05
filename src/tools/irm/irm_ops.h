@@ -69,6 +69,9 @@ int do_connect_ipcp(int     argc,
 int do_disconnect_ipcp(int     argc,
                        char ** argv);
 
+int do_set_ipcp(int     argc,
+                char ** argv);
+
 int do_list_ipcp(int     argc,
                  char ** argv);
 

@@ -118,4 +118,8 @@ int  poa_addr_set_eth(struct poa_addr * addr,
 int  parse_ethertype(const char * str,
                      uint16_t *   ethertype);
 
+/* Set or clear IPCP_FLAG_TRANSIT in *flags from an "on"/"off" argument. */
+int  transit_value(const char * arg,
+                   uint32_t *   flags);
+
 #endif /* OUROBOROS_TOOLS_IRM_UTILS_H */

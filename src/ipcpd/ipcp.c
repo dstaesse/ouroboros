@@ -38,6 +38,7 @@
 #define ALLOC_TIMEOUT     50 /* ms */
 #define HAS_POA           (ipcpd.type != IPCP_LOCAL)
 
+#include <ouroboros/atomics.h>
 #include <ouroboros/bitmap.h>
 #include <ouroboros/dev.h>
 #include <ouroboros/errno.h>
@@ -105,6 +106,8 @@ struct {
         char *             name;
 
         enum ipcp_type     type;
+        uint32_t           flags;
+        pthread_mutex_t    flags_mtx;
         char               layer_name[LAYER_NAME_SIZE + 1];
 
         uint64_t           dt_addr;
@@ -143,6 +146,11 @@ struct cmd {
         size_t           len;
         int              fd;
 };
+
+uint32_t ipcp_get_flags(void)
+{
+        return LOAD_RELAXED(&ipcpd.flags);
+}
 
 enum ipcp_type ipcp_get_type(void)
 {
@@ -438,6 +446,52 @@ static void free_msg(void * o)
         ipcp_msg__free_unpacked((ipcp_msg_t *) o, NULL);
 }
 
+/*
+ * Runs under flags_mtx. Components read the flags live and only exist
+ * once the IPCP is operational; the op reacts to a change.
+ */
+static void set_flags(uint32_t flags,
+                      uint32_t mask)
+{
+        uint32_t val;
+        uint32_t changed;
+
+        val = (ipcpd.flags & ~mask) | (flags & mask);
+
+        changed = val ^ ipcpd.flags;
+        if (changed == 0)
+                return;
+
+        STORE_RELAXED(&ipcpd.flags, val);
+
+        if (changed & IPCP_FLAG_TRANSIT)
+                log_info("Transit %s.",
+                         (val & IPCP_FLAG_TRANSIT) ? "enabled" : "disabled");
+
+        if (ipcpd.ops->ipcp_set_flags == NULL)
+                return;
+
+        if (ipcp_get_state() == IPCP_OPERATIONAL)
+                ipcpd.ops->ipcp_set_flags(val, changed);
+}
+
+static void do_set_flags(uint32_t     flags,
+                         uint32_t     mask,
+                         ipcp_msg_t * ret_msg)
+{
+        if (mask & ~IPCP_FLAGS_ALL) {
+                ret_msg->result = -EINVAL;
+                return;
+        }
+
+        pthread_mutex_lock(&ipcpd.flags_mtx);
+
+        set_flags(flags, mask);
+
+        pthread_mutex_unlock(&ipcpd.flags_mtx);
+
+        ret_msg->result = 0;
+}
 
 static void do_bootstrap(ipcp_config_msg_t * conf_msg,
                          ipcp_msg_t *        ret_msg)
@@ -483,7 +537,9 @@ static void do_bootstrap(ipcp_config_msg_t * conf_msg,
         ipcpd.dir_hash_algo = (enum hash_algo) info->dir_hash_algo;
         if (poa_set_layer(info->name) < 0)
                 log_warn("Failed to set layer name for PoA queries.");
+
         ret_msg->layer_info = layer_info_s_to_msg(info);
+
         ipcp_set_state(IPCP_OPERATIONAL);
 
         log_info("Finished bootstrapping in %s.", info->name);
@@ -536,7 +592,9 @@ static void do_enroll(const char *           dst,
         ipcpd.dir_hash_algo = (enum hash_algo) info.dir_hash_algo;
         if (poa_set_layer(info.name) < 0)
                 log_warn("Failed to set layer name for PoA queries.");
+
         ret_msg->layer_info = layer_info_s_to_msg(&info);
+
         ipcp_set_state(IPCP_OPERATIONAL);
 
         log_info("Finished enrolling with %s in layer %s.", dst, info.name);
@@ -1063,6 +1121,9 @@ static void * mainloop(void * o)
                 case IPCP_MSG_CODE__IPCP_BOOTSTRAP:
                         do_bootstrap(msg->conf, &ret_msg);
                         break;
+                case IPCP_MSG_CODE__IPCP_SET_FLAGS:
+                        do_set_flags(msg->flags, msg->mask, &ret_msg);
+                        break;
                 case IPCP_MSG_CODE__IPCP_ENROLL:
                         do_enroll(msg->dst, msg->peer, &ret_msg);
                         break;
@@ -1218,6 +1279,7 @@ int ipcp_init(int               argc,
         log_init(log);
 
         ipcpd.type  = type;
+        ipcpd.flags = IPCP_FLAG_TRANSIT;
 
 #if defined (__linux__)
         prctl(PR_SET_TIMERSLACK, IPCP_LINUX_SLACK_NS, 0, 0, 0);
@@ -1235,12 +1297,17 @@ int ipcp_init(int               argc,
 
         ipcpd.ops = ops;
 
-        if (pthread_mutex_init(&ipcpd.state_mtx, NULL)) {
+        if (pthread_mutex_init(&ipcpd.state_mtx, NULL) != 0) {
                 log_err("Failed to create mutex.");
                 goto fail_state_mtx;
         }
 
-        if (pthread_condattr_init(&cattr)) {
+        if (pthread_mutex_init(&ipcpd.flags_mtx, NULL) != 0) {
+                log_err("Failed to create flags mutex.");
+                goto fail_flags_mtx;
+        }
+
+        if (pthread_condattr_init(&cattr) != 0) {
                 log_err("Failed to create condattr.");
                 goto fail_cond_attr;
         }
@@ -1329,6 +1396,8 @@ int ipcp_init(int               argc,
  fail_state_cond:
         pthread_condattr_destroy(&cattr);
  fail_cond_attr:
+        pthread_mutex_destroy(&ipcpd.flags_mtx);
+ fail_flags_mtx:
         pthread_mutex_destroy(&ipcpd.state_mtx);
  fail_state_mtx:
         close(ipcpd.sockfd);
@@ -1352,9 +1421,12 @@ int ipcp_start(void)
 
         pthread_sigmask(SIG_BLOCK, &sigset, NULL);
 
-        info.pid  = getpid();
-        info.type = ipcpd.type;
+        info.pid   = getpid();
+        info.type  = ipcpd.type;
+        info.flags = ipcpd.flags;
+
         strcpy(info.name, ipcpd.name);
+
         info.state = IPCP_BOOT;
 
         ipcp_set_state(IPCP_BOOT);
@@ -1483,6 +1555,7 @@ void ipcp_fini(void)
         free(ipcpd.sock_path);
 
         pthread_cond_destroy(&ipcpd.state_cond);
+        pthread_mutex_destroy(&ipcpd.flags_mtx);
         pthread_mutex_destroy(&ipcpd.state_mtx);
         pthread_cond_destroy(&ipcpd.alloc_cond);
         pthread_mutex_destroy(&ipcpd.alloc_lock);

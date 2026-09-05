@@ -247,6 +247,7 @@ static pid_t spawn_ipcp(struct ipcp_info * info)
         argv[0] = full_name;
         argv[1] = irmd_pid;
         argv[2] = (char *) info->name;
+
         if (log_syslog)
                 argv[3] = "1";
         else
@@ -280,13 +281,69 @@ static int kill_ipcp(pid_t pid)
         return 0;
 }
 
+/* A local IPCP only loops back, so it always carries transit. */
+static int check_ipcp_flags(enum ipcp_type type,
+                            uint32_t       flags)
+{
+        if (flags & ~IPCP_FLAGS_ALL) {
+                log_err("Invalid IPCP flags 0x%08x.", flags);
+                return -EINVAL;
+        }
+
+        if (!(flags & IPCP_FLAG_TRANSIT) && type == IPCP_LOCAL) {
+                log_err("Cannot disable transit on a local IPCP.");
+                return -EPERM;
+        }
+
+        return 0;
+}
+
+static int set_ipcp_flags(pid_t    pid,
+                          uint32_t flags,
+                          uint32_t mask)
+{
+        struct ipcp_info info;
+        int              ret;
+
+        info.pid = pid;
+        if (reg_get_ipcp(&info, NULL) < 0) {
+                log_err("Failed to get IPCP %d.", pid);
+                return -EIPCP;
+        }
+
+        flags = (info.flags & ~mask) | (flags & mask);
+
+        ret = check_ipcp_flags(info.type, flags);
+        if (ret < 0)
+                return ret;
+
+        if (ipcp_set_flags(pid, flags, mask) < 0) {
+                log_err("Failed to set flags on IPCP %d.", pid);
+                return -EIPCP;
+        }
+
+        if (reg_set_flags_for_ipcp(pid, flags) < 0) {
+                log_err("Failed to record flags for IPCP %d.", pid);
+                return -EIPCP;
+        }
+
+        return 0;
+}
+
+/* The boot wait returns the IPCP's own report, so the request is kept. */
 int create_ipcp(struct ipcp_info * info)
 {
         struct timespec abstime;
         struct timespec timeo = TIMESPEC_INIT_MS(SOCKET_TIMEOUT);
+        uint32_t        flags = info->flags;
         int             status;
+        int             ret;
 
         assert(info->pid == 0);
+
+        ret = check_ipcp_flags(info->type, flags);
+        if (ret < 0)
+                return ret;
 
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
         ts_add(&abstime, &timeo, &abstime);
@@ -306,9 +363,17 @@ int create_ipcp(struct ipcp_info * info)
                 goto fail_boot;
         }
 
+        if (set_ipcp_flags(info->pid, flags, IPCP_FLAGS_ALL) < 0)
+                goto fail_flags;
+
         log_info("Created IPCP %d.", info->pid);
 
         return 0;
+
+ fail_flags:
+        kill_ipcp(info->pid);
+        reg_destroy_proc(info->pid);
+        return -1;
 
  fail_boot:
         waitpid(info->pid, &status, 0);
@@ -2821,6 +2886,9 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg,
                         res = i == res ? 0 : -ENOMEM;
                 }
                 free(eps);
+                break;
+        case IRM_MSG_CODE__IRM_SET_IPCP_FLAGS:
+                res = set_ipcp_flags(msg->pid, msg->flags, msg->mask);
                 break;
         case IRM_MSG_CODE__IRM_CONNECT_IPCP:
                 flow.qs = qos_spec_msg_to_s(msg->qosspec);

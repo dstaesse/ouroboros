@@ -408,6 +408,38 @@ int ipcp_connect(pid_t                   pid,
         return ret;
 }
 
+int ipcp_set_flags(pid_t    pid,
+                   uint32_t flags,
+                   uint32_t mask)
+{
+        ipcp_msg_t   msg = IPCP_MSG__INIT;
+        ipcp_msg_t * recv_msg;
+        int          ret;
+
+        msg.code      = IPCP_MSG_CODE__IPCP_SET_FLAGS;
+        msg.has_pid   = true;
+        msg.pid       = pid;
+        msg.has_flags = true;
+        msg.flags     = flags;
+        msg.has_mask  = true;
+        msg.mask      = mask;
+
+        recv_msg = send_recv_ipcp_msg(pid, &msg);
+        if (recv_msg == NULL)
+                return -EIPCP;
+
+        if (!recv_msg->has_result) {
+                ipcp_msg__free_unpacked(recv_msg, NULL);
+                return -EIPCP;
+        }
+
+        ret = recv_msg->result;
+
+        ipcp_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
+}
+
 int ipcp_disconnect(pid_t        pid,
                     const char * dst,
                     const char * component)

@@ -469,6 +469,14 @@ static time_t packet_handler(int                  fd,
 
         dt_pci_des(head, &dt_pci);
         if (dt_pci.dst_addr != dt.addr) {
+                /* A non-transit IPCP only sources and sinks packets. */
+                if (!(ipcp_get_flags() & IPCP_FLAG_TRANSIT)) {
+                        log_dbg("Dropped transit packet: non-transit.");
+                        ipcp_spb_release(spb);
+                        dt_stat_inc(fd, r_drp, qc, len);
+                        return 0;
+                }
+
                 if (dt_pci.ttl == 0) {
                         log_dbg("TTL was zero.");
                         ipcp_spb_release(spb);

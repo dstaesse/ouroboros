@@ -33,6 +33,7 @@
 struct ipcp_list_info {
         pid_t          pid;
         enum ipcp_type type;
+        uint32_t       flags;
         char           name[NAME_SIZE];
         char           layer[LAYER_NAME_SIZE];
 };
@@ -40,7 +41,8 @@ struct ipcp_list_info {
 __BEGIN_DECLS
 
 pid_t   irm_create_ipcp(const char *   name,
-                        enum ipcp_type type);
+                        enum ipcp_type type,
+                        uint32_t       flags);
 
 int     irm_destroy_ipcp(pid_t pid);
 
@@ -63,6 +65,10 @@ int     irm_detach_ipcp(pid_t                   pid,
 /* Caller frees *poas. */
 ssize_t irm_list_poas(pid_t              pid,
                       struct poa_spec ** poas);
+
+int     irm_set_ipcp_flags(pid_t    pid,
+                           uint32_t flags,
+                           uint32_t mask);
 
 int     irm_connect_ipcp(pid_t                   pid,
                          const char *            dst,

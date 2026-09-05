@@ -68,10 +68,13 @@
 #define LSU_FMT "LSU ["ADDR_FMT32 " -- " ADDR_FMT32 " seq: %09" PRIu64 "]"
 #define LSU_VAL(src, dst, seqno) ADDR_VAL32(&src), ADDR_VAL32(&dst), seqno
 
+#define LS_FLAG_TRANSIT 0x01 /* Source forwards for others. */
+
 struct lsa {
         uint64_t d_addr;
         uint64_t s_addr;
         uint64_t seqno;
+        uint8_t  flags;
 } __attribute__((packed));
 
 struct routing_i {
@@ -92,6 +95,7 @@ struct adjacency {
         uint64_t         src;
 
         uint64_t         seqno;
+        uint8_t          flags;
 
         time_t           stamp;
 };
@@ -138,8 +142,10 @@ struct {
 } ls;
 
 struct routing_ops link_state_ops = {
-        .init              = (int (*)(void *, enum pol_pff *)) link_state_init,
+        .init              = (int (*)(void *, enum pol_pff *))
+                             link_state_init,
         .fini              = link_state_fini,
+        .announce          = link_state_announce,
         .start             = link_state_start,
         .stop              = link_state_stop,
         .routing_i_create  = link_state_routing_i_create,
@@ -468,10 +474,26 @@ static void set_pff_modified(bool calc)
         pthread_mutex_unlock(&ls.instances.mtx);
 }
 
+static bool announces_path(uint64_t src,
+                           uint8_t  flags)
+{
+        if (src == ls.addr)
+                return true;
+
+        return (flags & LS_FLAG_TRANSIT) != 0;
+}
+
+static uint8_t own_lsa_flags(void)
+{
+        return (ipcp_get_flags() & IPCP_FLAG_TRANSIT) ? LS_FLAG_TRANSIT : 0;
+}
+
 static void lsdb_graph_link(struct adjacency * adj,
                             qosspec_t *        qs)
 {
-        if (graph_announce_link(ls.graph, adj->src, adj->dst, true, *qs) < 0)
+        bool fwd = announces_path(adj->src, adj->flags);
+
+        if (graph_announce_link(ls.graph, adj->src, adj->dst, fwd, *qs) < 0)
                 log_warn("Failed to add link to graph.");
 }
 
@@ -505,16 +527,30 @@ static struct adjacency * find_adjacency(uint64_t            src,
         return NULL;
 }
 
-/* Adopts a newer LSA; ls.lock is held. */
+/* Adopts a newer LSA. Sets *modified on graph change. Call under ls.lock. */
 static int update_adjacency(struct adjacency * adj,
                             uint64_t           seqno,
-                            time_t             stamp)
+                            uint8_t            flags,
+                            time_t             stamp,
+                            qosspec_t *        qs,
+                            bool *             modified)
 {
+        bool was;
+        bool is;
+
         if (adj->seqno >= seqno)
                 return -1;
 
+        was = announces_path(adj->src, adj->flags);
+        is  = announces_path(adj->src, flags);
+
+        adj->flags = flags;
         adj->stamp = stamp;
         adj->seqno = seqno;
+
+        *modified = was != is;
+        if (*modified)
+                lsdb_graph_link(adj, qs);
 
         return 0;
 }
@@ -533,6 +569,7 @@ static struct adjacency * add_adjacency(uint64_t           src,
         adj->src   = src;
         adj->dst   = dst;
         adj->seqno = 0;
+        adj->flags = 0;
         adj->stamp = 0;
 
         llist_add_tail_at(&adj->next, pos, &ls.db);
@@ -543,11 +580,13 @@ static struct adjacency * add_adjacency(uint64_t           src,
 static int lsdb_add_link(uint64_t    src,
                          uint64_t    dst,
                          uint64_t    seqno,
+                         uint8_t     flags,
                          qosspec_t * qs)
 {
         struct list_head * p;
         struct adjacency * adj;
         struct timespec    now;
+        bool               modified = false;
         int                ret;
 
         assert(qs);
@@ -558,9 +597,13 @@ static int lsdb_add_link(uint64_t    src,
 
         adj = find_adjacency(src, dst, &p);
         if (adj != NULL) {
-                ret = update_adjacency(adj, seqno, now.tv_sec);
+                ret = update_adjacency(adj, seqno, flags, now.tv_sec, qs,
+                                       &modified);
 
                 pthread_rwlock_unlock(&ls.lock);
+
+                if (modified)
+                        set_pff_modified(true);
 
                 return ret;
         }
@@ -572,6 +615,7 @@ static int lsdb_add_link(uint64_t    src,
         }
 
         adj->seqno = seqno;
+        adj->flags = flags;
         adj->stamp = now.tv_sec;
 
         lsdb_graph_link(adj, qs);
@@ -641,6 +685,7 @@ static int write_lsm(int                      fd,
         lsm.d_addr = hton64(adj->dst);
         lsm.s_addr = hton64(adj->src);
         lsm.seqno  = hton64(adj->seqno);
+        lsm.flags  = adj->flags;
 
         return flow_write(fd, &lsm, sizeof(lsm));
 }
@@ -648,7 +693,8 @@ static int write_lsm(int                      fd,
 static int queue_lsm(struct list_head * q,
                      uint64_t           src,
                      uint64_t           dst,
-                     uint64_t           seqno)
+                     uint64_t           seqno,
+                     uint8_t            flags)
 {
         struct adjacency * lsm;
 
@@ -659,6 +705,7 @@ static int queue_lsm(struct list_head * q,
         lsm->src   = src;
         lsm->dst   = dst;
         lsm->seqno = seqno;
+        lsm->flags = flags;
 
         list_add_tail(&lsm->next, q);
 
@@ -739,12 +786,13 @@ static void flood_lsms(struct list_head * q)
         free(nbs);
 }
 
-/* Re-originates an own link; ls.lock is held. */
+/* Re-originates an own link with the live capability; ls.lock is held. */
 static void originate(struct adjacency * adj,
                       struct list_head * q)
 {
+        adj->flags = own_lsa_flags();
         adj->seqno = ++ls.seqno;
-        if (queue_lsm(q, adj->src, adj->dst, adj->seqno) < 0)
+        if (queue_lsm(q, adj->src, adj->dst, adj->seqno, adj->flags) < 0)
                 log_warn("Failed to queue LSM.");
 }
 
@@ -845,6 +893,7 @@ static void lsdb_replicate(int fd)
                 cpy->dst   = adj->dst;
                 cpy->src   = adj->src;
                 cpy->seqno = adj->seqno;
+                cpy->flags = adj->flags;
 
                 list_add_tail(&cpy->next, &copy);
         }
@@ -1026,7 +1075,7 @@ static void * lsreader(void * o)
                         }
 
                         if (lsdb_add_link(msg.s_addr, msg.d_addr, msg.seqno,
-                                          &qs))
+                                          msg.flags, &qs))
                                 continue;
 
                         forward_lsm(buf, len, fd);
@@ -1229,6 +1278,28 @@ void link_state_stop(void)
 }
 
 
+void link_state_announce(void)
+{
+        struct list_head * p;
+        struct list_head   q;
+
+        list_head_init(&q);
+
+        pthread_rwlock_wrlock(&ls.lock);
+
+        llist_for_each(p, &ls.db) {
+                struct adjacency * adj;
+
+                adj = list_entry(p, struct adjacency, next);
+                if (adj->src == ls.addr)
+                        originate(adj, &q);
+        }
+
+        pthread_rwlock_unlock(&ls.lock);
+
+        flood_lsms(&q);
+}
+
 int link_state_init(struct ls_config * conf,
                     enum pol_pff *     pff_type)
 {
@@ -1248,6 +1319,9 @@ int link_state_init(struct ls_config * conf,
         info.addr         = ls.addr;
 
         ls.conf = *conf;
+
+        if (!(ipcp_get_flags() & IPCP_FLAG_TRANSIT))
+                log_dbg("Announcing as non-transit.");
 
         switch (conf->pol) {
         case LS_SIMPLE:

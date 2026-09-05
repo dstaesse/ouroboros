@@ -830,6 +830,7 @@ static int __get_ipcp_info(ipcp_list_msg_t ** msg,
         (*msg)->pid       = ipcp->info.pid;
         (*msg)->type      = ipcp->info.type;
         (*msg)->hash_algo = ipcp->layer.dir_hash_algo;
+        (*msg)->flags     = ipcp->info.flags;
 
         return 0;
 
@@ -1638,6 +1639,29 @@ int reg_unbind_prog(const char * name,
         return 0;
 
  fail:
+        pthread_mutex_unlock(&reg.mtx);
+        return -1;
+}
+
+int reg_set_flags_for_ipcp(pid_t    pid,
+                           uint32_t flags)
+{
+        struct reg_ipcp * ipcp;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        ipcp = __reg_get_ipcp(pid);
+        if (ipcp == NULL) {
+                log_err("IPCP %d not found.", pid);
+                goto fail_ipcp;
+        }
+
+        ipcp->info.flags = flags;
+
+        pthread_mutex_unlock(&reg.mtx);
+
+        return 0;
+ fail_ipcp:
         pthread_mutex_unlock(&reg.mtx);
         return -1;
 }

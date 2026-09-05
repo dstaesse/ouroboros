@@ -71,3 +71,8 @@ void routing_fini(void)
 {
         r_ops->fini();
 }
+
+void routing_announce(void)
+{
+        r_ops->announce();
+}

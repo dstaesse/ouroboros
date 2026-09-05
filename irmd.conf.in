@@ -115,11 +115,13 @@ bootstrap="broadcast"   # Defaults to not set.
 
 [broadcast.bc2]
 enrol="bc1"
+# transit=false         # Relay nothing between peers.
 # autobind=true         # Defaults to false.
 
 [unicast.lan1]
 bootstrap="LAN"         # Defaults to not set.
 autobind=true           # Defaults to false.
+# transit=false         # Defaults to true. Forward/broadcast traffic.
    # BOOTSTRAP CONFIGURATION
 # addr_size=4           # Defaults to 4 (32-bit addresses).
 # eid_size=8            # Defaults to 8 (64-bit endpoint IDs, only accepted option).
@@ -151,6 +153,7 @@ dev="lo"
 
 [unicast.lan2]
 enrol="LAN"             # Defaults to not set.
+# transit=false         # Also valid on an enrolling IPCP.
 # enrol={dst="LAN", eth={dev="eth0"}}     # Or enrol over a specific PoA.
 conn=["lan1"]           # Defaults to [].
 # conn=["lan1",

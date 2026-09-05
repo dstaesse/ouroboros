@@ -119,7 +119,8 @@ that rely on data transfer flows are the \fIdirectory\fR and the
 
 .SH IRM IPCP COMMANDS
 .PP
-\fBirm ipcp create\fR type \fItype\fR name \fIname\fR
+\fBirm ipcp create\fR type \fItype\fR name \fIname\fR \
+[transit \fBon\fR|\fBoff\fR]
 .RS 4
 creates an IPCP process of type \fItype\fR in the system with name
 \fIname\fR. Allowable values for \fItype\fR are:
@@ -129,6 +130,9 @@ creates an IPCP process of type \fItype\fR in the system with name
 \fBunicast\fR   - create a unicast IPCP that uses lower level layers.
 .PP
 \fBbroadcast\fR - create a broadcast IPCP that uses lower level layers.
+.PP
+A \fBunicast\fR or \fBbroadcast\fR IPCP can be created with \fBtransit off\fR
+to disable forwarding traffic.
 .RE
 
 .PP
@@ -138,11 +142,12 @@ destroys the IPCP process with name \fIname\fR.
 .RE
 .PP
 \fBirm ipcp bootstrap\fR type \fItype\fR name \fIname\fR layer \fIlayer\fR \
-[\fIparams\fR] [\fIautobind\fR]
+[\fIparams\fR] [transit \fBon\fR|\fBoff\fR] [\fIautobind\fR]
 .RS 4
 bootstraps an IPCP process of type \fItype\fR and name \fIname\fR in a
-layer \fIlayer\fR. If an IPCP with that name does not exist yet, the
-IPCP will be created.
+layer \fIlayer\fR, creating the IPCP first if none with that name
+exists. [transit \fBon\fR|\fBoff\fR] sets the transit setting of the
+IPCP before it is bootstrapped.
 .PP
 Values for [\fIparam\fR] are dependent on \fItype\fR:
 .PP
@@ -261,7 +266,7 @@ attached to.
 
 .PP
 \fBirm ipcp enroll\fR name \fIname\fR [type \fItype\fR] [dst \fIdst\fR] \
-[layer \fIlayer\fR] [\fIautobind\fR]
+[layer \fIlayer\fR] [transit \fBon\fR|\fBoff\fR] [\fIautobind\fR]
 .RS 4
 enrolls a unicast ot broadcast IPCP \fIname\fR with a dst IPCP into a
 layer. Either dst or layer need to be specified.
@@ -273,6 +278,9 @@ layer. Either dst or layer need to be specified.
 [layer \fIlayer\fR] specifies the name of the layer. Only specifying
 the layer name is a shorthand for the destination name being the same
 as the layer name.
+.PP
+[transit \fBon\fR|\fBoff\fR] sets the transit setting of the IPCP
+before it is enrolled.
 .PP
 [autobind] will automatically bind this IPCP to its name and the layer name.
 .PP
@@ -316,7 +324,13 @@ destination IPCP within the same layer.
 
 \fBirm ipcp list\fR type \fItype\fR name \fIname\fR layer \fIlayer\fR
 .RS 4
-lists IPCPs in the system. You can filter by type, by name or by layer.
+lists IPCPs in the system, with the transit setting of each. You can
+filter by type, by name or by layer.
+.RE
+
+\fBirm ipcp set\fR name \fIname\fR transit \fBon\fR|\fBoff\fR
+.RS 4
+changes the transit setting of a running IPCP.
 .RE
 .RE
 

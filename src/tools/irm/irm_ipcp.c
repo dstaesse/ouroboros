@@ -48,7 +48,7 @@ static void usage(void)
                "                    bootstrap enroll\n"
                "                    poa\n"
                "                    connect disconnect\n"
-               "                    list\n"
+               "                    list set\n"
                "                    help}\n");
 }
 
@@ -73,6 +73,7 @@ static const struct cmd {
         { "connect",    do_connect_ipcp },
         { "disconnect", do_disconnect_ipcp },
         { "list",       do_list_ipcp},
+        { "set",        do_set_ipcp },
         { "help",       do_help },
         { NULL,         NULL }
 };

@@ -20,6 +20,7 @@ set(IRM_SOURCES
   irm/irm_ipcp_poa_detach.c
   irm/irm_ipcp_poa_list.c
   irm/irm_ipcp_list.c
+  irm/irm_ipcp_set.c
   irm/irm_ipcp_connect.c
   irm/irm_ipcp_disconnect.c
   irm/irm_unbind_program.c

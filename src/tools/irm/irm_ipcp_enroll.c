@@ -58,6 +58,7 @@ static void usage(void)
                "                [dst <destination to enroll with>]\n"
                "                [type [TYPE], default = " UNICAST "]\n"
                "                [autobind]\n"
+               "                [transit [on|off] (default: on)]\n"
                "                [udp [UDP_PEER]]\n"
                "                [eth [dev <device>] [ethertype <ethertype>]]\n"
                "where TYPE in {" UNICAST " " BROADCAST "}\n"
@@ -101,6 +102,8 @@ int do_enroll_ipcp(int     argc,
         ssize_t                 len       = 0;
         int                     i         = 0;
         bool                    autobind  = false;
+        uint32_t                flags     = IPCP_FLAG_TRANSIT;
+        uint32_t                mask      = 0;
         int                     cargs;
         char *                  ipcp_type = UNICAST;
         enum ipcp_type          type      = IPCP_INVALID;
@@ -141,6 +144,10 @@ int do_enroll_ipcp(int     argc,
                 } else if (matches(*argv, "autobind") == 0) {
                         autobind = true;
                         cargs = 1;
+                } else if (matches(*argv, "transit") == 0) {
+                        if (transit_value(*(argv + 1), &flags) < 0)
+                                return -1;
+                        mask = IPCP_FLAG_TRANSIT;
                 } else {
                         printf("\"%s\" is unknown, try \"irm "
                                "enroll_ipcp\".\n", *argv);
@@ -190,7 +197,7 @@ int do_enroll_ipcp(int     argc,
                         pid = ipcps[i].pid;
 
         if (pid < 0) {
-                pid = irm_create_ipcp(ipcp, type);
+                pid = irm_create_ipcp(ipcp, type, flags);
                 if (pid < 0)
                         goto fail;
                 free(ipcps);
@@ -206,6 +213,10 @@ int do_enroll_ipcp(int     argc,
                         continue;
 
                 pid = ipcps[i].pid;
+                if (mask && irm_set_ipcp_flags(pid, flags, mask) < 0) {
+                        printf("Failed to set transit on %s.\n", ipcp);
+                        goto fail;
+                }
 
                 if (irm_enroll_ipcp(pid, dst, pa) < 0) {
                         printf("Failed to enroll IPCP.\n");

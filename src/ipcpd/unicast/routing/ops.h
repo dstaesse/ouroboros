@@ -31,6 +31,8 @@ struct routing_ops {
 
         void               (* fini)(void);
 
+        void               (* announce)(void);
+
         int                (* start)(void);
 
         void               (* stop)(void);

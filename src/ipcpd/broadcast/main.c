@@ -256,6 +256,7 @@ int broadcast_ipcp_dealloc(int fd)
 static struct ipcp_ops broadcast_ops = {
         .ipcp_bootstrap       = broadcast_ipcp_bootstrap,
         .ipcp_enroll          = broadcast_ipcp_enroll,
+        .ipcp_set_flags       = NULL,
         .ipcp_connect         = connmgr_ipcp_connect,
         .ipcp_disconnect      = connmgr_ipcp_disconnect,
         .ipcp_reg             = NULL,

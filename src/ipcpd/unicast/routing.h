@@ -35,6 +35,9 @@ int                routing_init(struct routing_config * conf,
 
 void               routing_fini(void);
 
+/* Re-originates the local routing state at once. */
+void               routing_announce(void);
+
 int                routing_start(void);
 
 void               routing_stop(void);

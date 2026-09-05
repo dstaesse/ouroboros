@@ -61,6 +61,7 @@ enum irm_msg_code {
         IRM_ATTACH_IPCP       = 33;
         IRM_DETACH_IPCP       = 34;
         IRM_LIST_POAS    = 35;
+        IRM_SET_IPCP_FLAGS    = 36;
 }
 
 message timespec_msg {
@@ -74,6 +75,7 @@ message ipcp_list_msg {
         required string name      = 3;
         required string layer     = 4;
         required uint32 hash_algo = 5;
+        required uint32 flags     = 6;
 }
 
 message irm_msg {
@@ -107,6 +109,8 @@ message irm_msg {
         optional uint32 generation       = 28; /* re-key batch generation */
         optional bool   rekey            = 29; /* re-key watermark trigger */
         optional bool   rk_initiator     = 30; /* re-key proof-holder side */
+        optional uint32 flags            = 31; /* IPCP flag values     */
+        optional uint32 mask             = 36; /* IPCP flags to set    */
         optional poa_addr_msg peer       = 32; /* peer PoA address     */
         optional poa_spec_msg poa        = 33; /* PoA to attach        */
         repeated poa_spec_msg poas       = 34; /* PoAs attached        */

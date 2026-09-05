@@ -39,7 +39,8 @@
 #include <sys/stat.h>
 
 int irm_create_ipcp(const char *   name,
-                    enum ipcp_type type)
+                    enum ipcp_type type,
+                    uint32_t       flags)
 {
         irm_msg_t        msg      = IRM_MSG__INIT;
         irm_msg_t *      recv_msg;
@@ -51,7 +52,8 @@ int irm_create_ipcp(const char *   name,
 
         memset(&info, 0, sizeof(info));
 
-        info.type = type;
+        info.type  = type;
+        info.flags = flags;
         strcpy(info.name, name);
 
         msg.code      = IRM_MSG_CODE__IRM_CREATE_IPCP;
@@ -132,6 +134,38 @@ int irm_bootstrap_ipcp(pid_t                      pid,
         }
 
         ret = recv_msg->result;
+        irm_msg__free_unpacked(recv_msg, NULL);
+
+        return ret;
+}
+
+int irm_set_ipcp_flags(pid_t    pid,
+                       uint32_t flags,
+                       uint32_t mask)
+{
+        irm_msg_t   msg = IRM_MSG__INIT;
+        irm_msg_t * recv_msg;
+        int         ret;
+
+        msg.code      = IRM_MSG_CODE__IRM_SET_IPCP_FLAGS;
+        msg.has_pid   = true;
+        msg.pid       = pid;
+        msg.has_flags = true;
+        msg.flags     = flags;
+        msg.has_mask  = true;
+        msg.mask      = mask;
+
+        recv_msg = send_recv_irm_msg(&msg);
+        if (recv_msg == NULL)
+                return -EIRMD;
+
+        if (!recv_msg->has_result) {
+                irm_msg__free_unpacked(recv_msg, NULL);
+                return -EIRMD;
+        }
+
+        ret = recv_msg->result;
+
         irm_msg__free_unpacked(recv_msg, NULL);
 
         return ret;
@@ -250,6 +284,7 @@ ssize_t irm_list_ipcps(struct ipcp_list_info ** ipcps)
         for (i = 0; i < nr; i++) {
                 (*ipcps)[i].pid   = recv_msg->ipcps[i]->pid;
                 (*ipcps)[i].type  = recv_msg->ipcps[i]->type;
+                (*ipcps)[i].flags = recv_msg->ipcps[i]->flags;
                 strcpy((*ipcps)[i].name, recv_msg->ipcps[i]->name);
                 strcpy((*ipcps)[i].layer, recv_msg->ipcps[i]->layer);
         }

@@ -61,11 +61,16 @@ enum poa_type {
         POA_INVALID
 };
 
+/* IPCP flags, settable at creation and at runtime. */
+#define IPCP_FLAG_TRANSIT 0x00000001 /* Forward for others */
+#define IPCP_FLAGS_ALL    (IPCP_FLAG_TRANSIT)
+
 struct ipcp_info {
         enum ipcp_type  type;
         pid_t           pid;
         char            name[IPCP_NAME_SIZE + 1];
         enum ipcp_state state; /* TODO: remove. */
+        uint32_t        flags;
 };
 
 /* Unicast IPCP components. */

@@ -81,6 +81,9 @@ int    reg_create_ipcp(const struct ipcp_info * info);
 
 bool   reg_has_ipcp(pid_t pid);
 
+int    reg_set_flags_for_ipcp(pid_t    pid,
+                              uint32_t flags);
+
 int    reg_set_layer_for_ipcp(struct ipcp_info *        info,
                               const struct layer_info * layer);
 
