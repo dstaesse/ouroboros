@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2026
  *
- * Undirected graph structure
+ * Directed graph structure
  *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
@@ -49,14 +49,16 @@ struct graph * graph_create(void);
 
 void           graph_destroy(struct graph * graph);
 
-int            graph_update_edge(struct graph * graph,
-                                 uint64_t       s_addr,
-                                 uint64_t       d_addr,
-                                 qosspec_t      qs);
+/* One LSA: s_addr links to d_addr, and forwards over it iff fwd. */
+int            graph_announce_link(struct graph * graph,
+                                   uint64_t       s_addr,
+                                   uint64_t       d_addr,
+                                   bool           fwd,
+                                   qosspec_t      qs);
 
-int            graph_del_edge(struct graph * graph,
-                              uint64_t       s_addr,
-                              uint64_t       d_addr);
+int            graph_withdraw_link(struct graph * graph,
+                                   uint64_t       s_addr,
+                                   uint64_t       d_addr);
 
 int            graph_routing_table(struct graph *     graph,
                                    enum routing_algo  algo,

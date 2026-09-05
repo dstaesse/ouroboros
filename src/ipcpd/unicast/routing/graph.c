@@ -1,7 +1,7 @@
 /*
  * Ouroboros - Copyright (C) 2016 - 2026
  *
- * Undirected graph structure
+ * Directed graph structure
  *
  *    Dimitri Staessens <dimitri@ouroboros.rocks>
  *    Sander Vrijders   <sander@ouroboros.rocks>
@@ -49,11 +49,16 @@ struct vertex {
         int              index;
 };
 
+/* One bit per LSA that supports the edge v -> nb. */
+#define EDGE_LINKED   0x01 /* nb announced the link. */
+#define EDGE_FORWARDS 0x02 /* v forwards over it. */
+#define EDGE_USABLE   (EDGE_LINKED | EDGE_FORWARDS)
+
 struct edge {
         struct list_head next;
         struct vertex *  nb;
         qosspec_t        qs;
-        int              announced;
+        uint8_t          flags;
 };
 
 struct graph {
@@ -106,8 +111,8 @@ static struct edge * add_edge(struct vertex * vertex,
         if (edge == NULL)
                 return NULL;
 
-        edge->nb = nb;
-        edge->announced = 0;
+        edge->nb    = nb;
+        edge->flags = 0;
 
         list_add(&edge->next, &vertex->edges);
 
@@ -170,6 +175,32 @@ static void free_edges(struct list_head * edges)
                 list_del(&e->next);
                 free(e);
         }
+}
+
+/*
+ * Edges are directional, so an empty edge list does not mean the
+ * vertex is unused: others may still announce a link to it.
+ */
+static bool vertex_in_use(struct graph *  graph,
+                          struct vertex * vertex)
+{
+        struct list_head * p;
+        struct list_head * q;
+
+        if (!list_is_empty(&vertex->edges))
+                return true;
+
+        llist_for_each(p, &graph->vertices) {
+                struct vertex * v = list_entry(p, struct vertex, next);
+
+                list_for_each(q, &v->edges) {
+                        struct edge * e = list_entry(q, struct edge, next);
+                        if (e->nb == vertex)
+                                return true;
+                }
+        }
+
+        return false;
 }
 
 static void del_vertex(struct graph *  graph,
@@ -235,123 +266,145 @@ void graph_destroy(struct graph * graph)
         free(graph);
 }
 
-int graph_update_edge(struct graph * graph,
-                      uint64_t       s_addr,
-                      uint64_t       d_addr,
-                      qosspec_t      qs)
+/* Finds or creates the edge s_addr -> d_addr; the lock is held. */
+static struct edge * get_edge(struct graph * graph,
+                              uint64_t       s_addr,
+                              uint64_t       d_addr)
+{
+        struct vertex * v;
+        struct vertex * nb;
+        struct edge *   e;
+
+        v = find_vertex_by_addr(graph, s_addr);
+        if (v == NULL && ((v = add_vertex(graph, s_addr)) == NULL))
+                goto fail_v;
+
+        nb = find_vertex_by_addr(graph, d_addr);
+        if (nb == NULL && ((nb = add_vertex(graph, d_addr)) == NULL))
+                goto fail_nb;
+
+        e = find_edge_by_addr(v, d_addr);
+        if (e == NULL && ((e = add_edge(v, nb)) == NULL))
+                goto fail_e;
+
+        return e;
+ fail_e:
+        if (nb != v && !vertex_in_use(graph, nb))
+                del_vertex(graph, nb);
+ fail_nb:
+        if (!vertex_in_use(graph, v))
+                del_vertex(graph, v);
+ fail_v:
+        log_err("Failed to add edge to graph.");
+        return NULL;
+}
+
+/* Drops an edge no LSA supports any more, and vertices left unused. */
+static void put_edge(struct graph *  graph,
+                     struct vertex * v,
+                     struct edge *   e)
+{
+        struct vertex * nb = e->nb;
+
+        if (e->flags != 0)
+                return;
+
+        del_edge(e);
+
+        if (!vertex_in_use(graph, v))
+                del_vertex(graph, v);
+
+        if (nb != v && !vertex_in_use(graph, nb))
+                del_vertex(graph, nb);
+}
+
+static int set_edge_flag(struct graph * graph,
+                         uint64_t       s_addr,
+                         uint64_t       d_addr,
+                         uint8_t        flag,
+                         qosspec_t      qs)
+{
+        struct edge * e;
+
+        e = get_edge(graph, s_addr, d_addr);
+        if (e == NULL)
+                return -ENOMEM;
+
+        e->flags |= flag;
+        e->qs     = qs;
+
+        return 0;
+}
+
+static int clear_edge_flag(struct graph * graph,
+                           uint64_t       s_addr,
+                           uint64_t       d_addr,
+                           uint8_t        flag)
 {
         struct vertex * v;
         struct edge *   e;
-        struct vertex * nb;
-        struct edge *   nb_e;
+
+        v = find_vertex_by_addr(graph, s_addr);
+        if (v == NULL)
+                return -1;
+
+        e = find_edge_by_addr(v, d_addr);
+        if (e == NULL)
+                return -1;
+
+        e->flags &= ~flag;
+
+        put_edge(graph, v, e);
+
+        return 0;
+}
+
+int graph_announce_link(struct graph * graph,
+                        uint64_t       s_addr,
+                        uint64_t       d_addr,
+                        bool           fwd,
+                        qosspec_t      qs)
+{
+        assert(graph != NULL);
+
+        pthread_mutex_lock(&graph->lock);
+
+        if (set_edge_flag(graph, d_addr, s_addr, EDGE_LINKED, qs) < 0)
+                goto fail;
+
+        if (fwd && set_edge_flag(graph, s_addr, d_addr, EDGE_FORWARDS, qs) < 0)
+                goto fail;
+
+        if (!fwd)
+                clear_edge_flag(graph, s_addr, d_addr, EDGE_FORWARDS);
+
+        pthread_mutex_unlock(&graph->lock);
+
+        return 0;
+ fail:
+        pthread_mutex_unlock(&graph->lock);
+        return -ENOMEM;
+}
+
+int graph_withdraw_link(struct graph * graph,
+                        uint64_t       s_addr,
+                        uint64_t       d_addr)
+{
+        int ret;
 
         assert(graph != NULL);
 
         pthread_mutex_lock(&graph->lock);
 
-        v = find_vertex_by_addr(graph, s_addr);
-        if (v == NULL && ((v = add_vertex(graph, s_addr)) == NULL)) {;
-                log_err("Failed to add src vertex.");
-                goto fail_add_s;
-        }
+        ret = clear_edge_flag(graph, d_addr, s_addr, EDGE_LINKED);
+        if (ret < 0)
+                log_err("No such link in graph.");
 
-        nb = find_vertex_by_addr(graph, d_addr);
-        if (nb == NULL && ((nb = add_vertex(graph, d_addr)) == NULL)) {
-               log_err("Failed to add dst vertex.");
-                goto fail_add_d;
-        }
-
-        e = find_edge_by_addr(v, d_addr);
-        if (e == NULL && ((e = add_edge(v, nb)) == NULL)) {
-                log_err("Failed to add edge to dst.");
-                goto fail_add_edge_d;
-        }
-
-        e->announced++;
-        e->qs = qs;
-
-        nb_e = find_edge_by_addr(nb, s_addr);
-        if (nb_e == NULL && ((nb_e = add_edge(nb, v)) == NULL)) {;
-                log_err("Failed to add edge to src.");
-                goto fail_add_edge_s;
-        }
-
-        nb_e->announced++;
-        nb_e->qs = qs;
+        clear_edge_flag(graph, s_addr, d_addr, EDGE_FORWARDS);
 
         pthread_mutex_unlock(&graph->lock);
 
-        return 0;
- fail_add_edge_s:
-        if (--e->announced == 0)
-                del_edge(e);
- fail_add_edge_d:
-        if (list_is_empty(&nb->edges))
-                del_vertex(graph, nb);
- fail_add_d:
-        if (list_is_empty(&v->edges))
-                del_vertex(graph, v);
- fail_add_s:
-        pthread_mutex_unlock(&graph->lock);
-        return -ENOMEM;
-
-}
-
-int graph_del_edge(struct graph * graph,
-                   uint64_t       s_addr,
-                   uint64_t       d_addr)
-{
-        struct vertex * v;
-        struct edge *   e;
-        struct vertex * nb;
-        struct edge *   nb_e;
-
-        assert(graph);
-
-        pthread_mutex_lock(&graph->lock);
-
-        v = find_vertex_by_addr(graph, s_addr);
-        if (v == NULL) {
-                log_err("Failed to find src vertex.");
-                goto fail;
-        }
-
-        nb = find_vertex_by_addr(graph, d_addr);
-        if (nb == NULL) {
-                log_err("No such destination vertex.");
-                goto fail;
-        }
-
-        e = find_edge_by_addr(v, d_addr);
-        if (e == NULL) {
-                log_err("No such source edge.");
-                goto fail;
-        }
-
-        nb_e = find_edge_by_addr(nb, s_addr);
-        if (nb_e == NULL) {
-                log_err("No such destination edge.");
-                goto fail;
-        }
-
-        if (--e->announced == 0)
-                del_edge(e);
-        if (--nb_e->announced == 0)
-                del_edge(nb_e);
-
-        /* Removing vertex if it was the last edge */
-        if (list_is_empty(&v->edges))
-                del_vertex(graph, v);
-        if (list_is_empty(&nb->edges))
-                del_vertex(graph, nb);
-
-        pthread_mutex_unlock(&graph->lock);
-
-        return 0;
-
- fail:
-        pthread_mutex_unlock(&graph->lock);
-        return -1;
+        return ret;
 }
 
 static int get_min_vertex(struct graph *   graph,
@@ -431,8 +484,7 @@ static int dijkstra(struct graph *    graph,
                 list_for_each(p, &v->edges) {
                         e = list_entry(p, struct edge, next);
 
-                        /* Only include it if both sides announced it. */
-                        if (e->announced != 2)
+                        if (e->flags != EDGE_USABLE)
                                 continue;
 
                         /*
@@ -637,6 +689,9 @@ static int graph_routing_table_lfa(struct graph *     graph,
                 list_for_each(q, &v->edges) {
                         e = list_entry(q, struct edge, next);
 
+                        if (e->flags != EDGE_USABLE)
+                                continue;
+
                         addrs[i] = e->nb->addr;
                         n_index[i] = e->nb->index;
                         if (dijkstra(graph, e->nb->addr,
@@ -654,6 +709,10 @@ static int graph_routing_table_lfa(struct graph *     graph,
                 v = list_entry(p, struct vertex, next);
 
                 if (v->addr == s_addr)
+                        continue;
+
+                /* No alternate for a destination we cannot reach. */
+                if ((*dist)[v->index] == INT_MAX)
                         continue;
 
                 /*
@@ -729,12 +788,18 @@ static int graph_routing_table_ecmp(struct graph *     graph,
                 int * tmp_dist;
 
                 e = list_entry(p, struct edge, next);
+                if (e->flags != EDGE_USABLE)
+                        continue;
+
                 if (dijkstra(graph, e->nb->addr, &nhops, &tmp_dist))
                         goto fail_src_v;
 
                 free(nhops);
 
                 for (i = 0; i < graph->vertices.len; ++i) {
+                        if (tmp_dist[i] == INT_MAX)
+                                continue;
+
                         if (tmp_dist[i] + 1 == (*dist)[i]) {
                                 n = malloc(sizeof(*n));
                                 if (n == NULL) {

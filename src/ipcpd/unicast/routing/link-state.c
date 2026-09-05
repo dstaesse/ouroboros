@@ -467,6 +467,19 @@ static void set_pff_modified(bool calc)
         pthread_mutex_unlock(&ls.instances.mtx);
 }
 
+static void lsdb_graph_link(struct adjacency * adj,
+                            qosspec_t *        qs)
+{
+        if (graph_announce_link(ls.graph, adj->src, adj->dst, true, *qs) < 0)
+                log_warn("Failed to add link to graph.");
+}
+
+static void lsdb_graph_unlink(struct adjacency * adj)
+{
+        if (graph_withdraw_link(ls.graph, adj->src, adj->dst) < 0)
+                log_warn("Failed to remove link from graph.");
+}
+
 static int lsdb_add_link(uint64_t    src,
                          uint64_t    dst,
                          uint64_t    seqno,
@@ -512,8 +525,7 @@ static int lsdb_add_link(uint64_t    src,
 
         llist_add_tail_at(&adj->next, p, &ls.db);
 
-        if (graph_update_edge(ls.graph, src, dst, *qs))
-                log_warn("Failed to add edge to graph.");
+        lsdb_graph_link(adj, qs);
 
         pthread_rwlock_unlock(&ls.lock);
 
@@ -534,8 +546,7 @@ static int lsdb_del_link(uint64_t src,
                 struct adjacency * a = list_entry(p, struct adjacency, next);
                 if (a->dst == dst && a->src == src) {
                         llist_del(&a->next, &ls.db);
-                        if (graph_del_edge(ls.graph, src, dst))
-                                log_warn("Failed to delete edge from graph.");
+                        lsdb_graph_unlink(a);
 
                         pthread_rwlock_unlock(&ls.lock);
                         set_pff_modified(false);
@@ -667,9 +678,7 @@ static void * lsupdate(void * o)
                                 llist_del(&adj->next, &ls.db);
                                 log_dbg(LINK_FMT " timed out.",
                                         LINK_VAL(adj->src, adj->dst));
-                                if (graph_del_edge(ls.graph, adj->src,
-                                                   adj->dst))
-                                        log_err("Failed to del edge.");
+                                lsdb_graph_unlink(adj);
                                 free(adj);
                                 continue;
                         }
