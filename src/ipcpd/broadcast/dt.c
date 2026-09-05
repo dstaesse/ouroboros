@@ -55,6 +55,7 @@ struct nb {
         struct list_head next;
 
         int              fd;
+        bool             np1;
 };
 
 struct {
@@ -67,7 +68,8 @@ struct {
         pthread_t        listener;
 } fwd;
 
-static int dt_add_nb(int fd)
+static int dt_add_nb(int  fd,
+                     bool np1)
 {
         struct list_head * p;
         struct nb *        nb;
@@ -77,6 +79,8 @@ static int dt_add_nb(int fd)
         llist_for_each(p, &fwd.nbs) {
                 struct nb * el = list_entry(p, struct nb, next);
                 if (el->fd == fd) {
+                        el->np1 = np1;
+
                         pthread_rwlock_unlock(&fwd.lock);
                         log_warn("Already know neighbor on fd %d.", fd);
                         return 0;
@@ -90,11 +94,14 @@ static int dt_add_nb(int fd)
                 return -ENOMEM;
         }
 
-        nb->fd = fd;
+        nb->fd  = fd;
+        nb->np1 = np1;
 
         llist_add_tail(&nb->next, &fwd.nbs);
 
         pthread_rwlock_unlock(&fwd.lock);
+
+        fset_add(fwd.set, fd);
 
         log_dbg("Neighbor %d added.", fd);
 
@@ -105,6 +112,8 @@ static int dt_del_nb(int fd)
 {
         struct list_head * p;
         struct list_head * h;
+
+        fset_del(fwd.set, fd);
 
         pthread_rwlock_wrlock(&fwd.lock);
 
@@ -216,23 +225,27 @@ static void handle_event(void *       self,
                          int          event,
                          const void * o)
 {
-        /* FIXME: Apply correct QoS on graph */
-        struct conn *      c;
+        const struct conn * c  = o;
+        const int *         fd = o;
 
         (void) self;
 
-        c = (struct conn *) o;
-
         switch (event) {
         case NOTIFY_DT_CONN_ADD:
-                if (dt_add_nb(c->flow_info.fd) < 0)
-                        log_err("Failed to add neighbor.");
-                fset_add(fwd.set, c->flow_info.fd);
+                if (dt_add_nb(c->flow_info.fd, false) < 0)
+                        log_err("Failed to add peer.");
                 break;
         case NOTIFY_DT_CONN_DEL:
                 if (dt_del_nb(c->flow_info.fd) < 0)
-                        log_err("Failed to delete neighbor.");
-                fset_del(fwd.set, c->flow_info.fd);
+                        log_err("Failed to delete peer.");
+                break;
+        case NOTIFY_DT_NP1_ADD:
+                if (dt_add_nb(*fd, true) < 0)
+                        log_err("Failed to add N+1 flow.");
+                break;
+        case NOTIFY_DT_NP1_DEL:
+                if (dt_del_nb(*fd) < 0)
+                        log_err("Failed to delete N+1 flow.");
                 break;
         default:
                 break;

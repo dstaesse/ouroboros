@@ -227,15 +227,9 @@ static int name_check(const uint8_t * dst)
 static int broadcast_ipcp_join(int             fd,
                                const uint8_t * dst)
 {
-        int         err;
-        struct conn conn;
-        time_t      mpl = IPCP_BROADCAST_MPL;
-        buffer_t    data = BUF_INIT;
-
-        memset(&conn, 0, sizeof(conn));
-
-        conn.flow_info.fd = fd;
-        conn.flow_info.qs = qos_np1;
+        int      err;
+        time_t   mpl  = IPCP_BROADCAST_MPL;
+        buffer_t data = BUF_INIT;
 
         err = name_check(dst);
         if (err < 0) {
@@ -243,7 +237,7 @@ static int broadcast_ipcp_join(int             fd,
                 return err;
         }
 
-        notifier_event(NOTIFY_DT_CONN_ADD, &conn);
+        notifier_event(NOTIFY_DT_NP1_ADD, &fd);
 
         ipcp_flow_alloc_reply(fd, 0, mpl, IPCP_BROADCAST_MTU, &data);
 
@@ -252,13 +246,7 @@ static int broadcast_ipcp_join(int             fd,
 
 int broadcast_ipcp_dealloc(int fd)
 {
-        struct conn conn;
-
-        memset(&conn, 0, sizeof(conn));
-
-        conn.flow_info.fd = fd;
-
-        notifier_event(NOTIFY_DT_CONN_DEL, &conn);
+        notifier_event(NOTIFY_DT_NP1_DEL, &fd);
 
         ipcp_flow_dealloc(fd);
 
