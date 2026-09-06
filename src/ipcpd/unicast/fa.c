@@ -710,6 +710,13 @@ static int fa_handle_flow_reply(struct fa_msg * msg,
 
         flow = &fa.flows[fd];
 
+        /* A reply already set r_eid: this is a duplicate. */
+        if (flow->r_eid != (uint64_t) -1) {
+                pthread_rwlock_unlock(&fa.flows_lock);
+                log_dbg("Duplicate flow reply for fd %d.", fd);
+                return 0;
+        }
+
         flow->r_eid = ntoh64(msg->s_eid);
         response = ntoh32(msg->response);
 
