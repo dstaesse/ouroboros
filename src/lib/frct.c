@@ -355,6 +355,8 @@ struct frcti {
                 /* rcv reassembly */
                 size_t           max_rcv_sdu;         /* max reasm bytes  */
                 bool             draining;            /* dealloc drain    */
+                size_t           rcv_part_off;        /* partial rd bytes */
+                bool             rcv_part_end;        /* SDU end pending  */
                 uint8_t *        rcv_ring;            /* lazy alloc       */
                 size_t           rcv_ring_sz;         /* power of 2       */
                 uint32_t         ring_seq_cap;        /* ring/per_pkt     */
@@ -1934,6 +1936,8 @@ static void release_rq(struct frcti * frcti)
                 frcti->rcv_slots[i].idx = -1;
                 STAT_BUMP(frcti, rq_released);
         }
+
+        frcti->rcv_part_off = 0;
 }
 
 static __inline__ bool stream_ring_sz_ok(struct frcti * frcti,
@@ -2501,6 +2505,7 @@ static void frag_drop(struct frcti * frcti,
         }
 
         frcti->rcv_cr.rwe += count;
+        frcti->rcv_part_off = 0;
 
         /* Drop may span a gap; pull lwe up to preserve rwe - RQ_SIZE <= lwe. */
         edge = frcti->rcv_cr.rwe - RQ_SIZE;
@@ -2508,31 +2513,58 @@ static void frag_drop(struct frcti * frcti,
                 STORE_RELEASE(&frcti->rcv_cr.lwe, edge);
 }
 
-/* Copy `count` fragments at rq[lwe..] into buf; release + advance lwe. */
-static size_t frag_gather(struct frcti * frcti,
-                          size_t         count,
-                          uint8_t *      buf)
+/* Copy `len` bytes at byte offset `off` of the run at rq[lwe..]. */
+static void frag_copy(struct frcti * frcti,
+                      size_t         count,
+                      uint8_t *      buf,
+                      size_t         off,
+                      size_t         len)
 {
         struct ssm_pk_buff * frag;
-        size_t               off = 0;
+        size_t               cur = 0;
         size_t               i;
         uint32_t             k   = frcti->rcv_cr.rwe - RQ_SIZE;
 
-        for (i = 0; i < count; ++i) {
-                size_t pos = RQ_SLOT(k + i);
+        for (i = 0; i < count && len > 0; ++i) {
                 size_t flen;
+                size_t skip;
+                size_t n;
 
                 frag = rq_frag(frcti, k + i);
+
                 flen = ssm_pk_buff_len(frag);
-                memcpy(buf + off, ssm_pk_buff_head(frag), flen);
-                off += flen;
+                if (cur + flen <= off) {
+                        cur += flen;
+                        continue;
+                }
+
+                skip = off > cur ? off - cur : 0;
+                n    = MIN(flen - skip, len);
+
+                memcpy(buf, ssm_pk_buff_head(frag) + skip, n);
+
+                buf += n;
+                len -= n;
+                cur += flen;
+        }
+}
+
+/* Release the run's `count` fragments at rq[lwe..]; advance the edge. */
+static void frag_release(struct frcti * frcti,
+                         size_t         count)
+{
+        size_t   i;
+        uint32_t k = frcti->rcv_cr.rwe - RQ_SIZE;
+
+        for (i = 0; i < count; ++i) {
+                size_t pos = RQ_SLOT(k + i);
+
                 frct_spb_release_idx(frcti->rcv_slots[pos].idx);
                 frcti->rcv_slots[pos].idx = -1;
         }
 
         frcti->rcv_cr.rwe += count;
-
-        return off;
+        frcti->rcv_part_off = 0;
 }
 
 /* Caller holds lock. */
@@ -2801,15 +2833,18 @@ static ssize_t frcti_consume_stream(struct frcti * frcti,
 }
 
 /*
- * FRTX consume: copy next ready PDU (full SDU or nothing). Returns bytes,
- * -EAGAIN (no PDU), or -EMSGSIZE (oversize: run dropped to unblock flow).
+ * FRTX consume: copy next ready PDU. Returns bytes, -EAGAIN (no PDU)
+ * or -EMSGSIZE (oversize: run dropped). With partrd a short buffer
+ * takes a prefix; a read of exactly count is followed by a 0 read.
  */
 static ssize_t frcti_consume(struct frcti * frcti,
                              uint8_t *      buf,
-                             size_t         count)
+                             size_t         count,
+                             bool           partrd)
 {
         size_t          n;
         size_t          total;
+        size_t          left;
         bool            overflow;
         enum frag_state st;
         ssize_t         ret;
@@ -2817,6 +2852,12 @@ static ssize_t frcti_consume(struct frcti * frcti,
         assert(frcti);
 
         pthread_rwlock_wrlock(&frcti->lock);
+
+        if (frcti->rcv_part_end) {
+                frcti->rcv_part_end = false;
+                ret = 0;
+                goto unlock;
+        }
 
         while (true) {
                 st = frag_run_inspect(frcti, &n);
@@ -2832,14 +2873,31 @@ static ssize_t frcti_consume(struct frcti * frcti,
                 }
                 /* FRAG_DELIVER */
                 total = frag_total_len(frcti, n, &overflow);
-                if (overflow || total > frcti->max_rcv_sdu || total > count) {
+
+                if (overflow || total > frcti->max_rcv_sdu
+                    || (!partrd && total > count)) {
                         if (!frcti->draining)
                                 STAT_ADD(frcti, frag_drop, n);
                         frag_drop(frcti, n);
                         ret = -EMSGSIZE;
                         goto unlock;
                 }
-                ret = (ssize_t) frag_gather(frcti, n, buf);
+
+                left = total - frcti->rcv_part_off;
+                if (left > count) {
+                        frag_copy(frcti, n, buf, frcti->rcv_part_off, count);
+
+                        frcti->rcv_part_off += count;
+                        ret = (ssize_t) count;
+                        goto unlock;
+                }
+
+                frag_copy(frcti, n, buf, frcti->rcv_part_off, left);
+                frag_release(frcti, n);
+
+                frcti->rcv_part_end = partrd && left == count;
+
+                ret = (ssize_t) left;
                 if (n > 1)
                         STAT_BUMP(frcti, sdu_reasm);
                 else
@@ -4502,11 +4560,11 @@ static void frcti_rcv(struct frcti *       frcti,
 #define FRCTI_PDU_INFO(frcti, len, nfrags)                              \
         ((frcti) == NULL ? -EAGAIN : frcti_pdu_info((frcti), (len), (nfrags)))
 
-#define FRCTI_CONSUME(frcti, buf, count)                                \
+#define FRCTI_CONSUME(frcti, buf, count, partrd)                        \
         ((frcti) == NULL ? (ssize_t) -EAGAIN                            \
          : (frcti)->stream                                              \
                  ? frcti_consume_stream((frcti), (buf), (count))        \
-                 : frcti_consume((frcti), (buf), (count)))
+                 : frcti_consume((frcti), (buf), (count), (partrd)))
 
 #define FRCTI_IS_FRTX(frcti)                                            \
         ((frcti) != NULL && ((frcti)->rcv_cr.cflags & FRCTFRTX))

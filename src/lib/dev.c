@@ -696,6 +696,7 @@ static void flow_clear(int fd)
         memset(&proc.flows[fd], 0, sizeof(proc.flows[fd]));
 
         proc.flows[fd].info.id  = -1;
+        proc.flows[fd].part_idx = NO_PART;
 }
 
 /* Order before flow_fini's wrlock, which blocks on rdlock holders. */
@@ -720,6 +721,9 @@ static void do_flow_fini(int fd)
 
         if (proc.flows[fd].frcti != NULL)
                 frcti_destroy(proc.flows[fd].frcti);
+
+        if (proc.flows[fd].part_idx >= 0)
+                ssm_pool_remove(proc.pool, proc.flows[fd].part_idx);
 
         if (proc.flows[fd].info.id != -1) {
                 flow_destroy(&proc.id_to_fd[proc.flows[fd].info.id]);
@@ -2155,7 +2159,7 @@ static ssize_t deliver_pkt(struct flow *        flow,
 
         if (partrd) {
                 memcpy(buf, packet, count);
-                ssm_pk_buff_pop(spb, n);
+                ssm_pk_buff_pop(spb, count);
                 flow->part_idx = idx;
                 return count;
         }
@@ -2169,6 +2173,7 @@ static ssize_t flow_read_frcti(struct flow *     flow,
                                void *            buf,
                                size_t            count,
                                bool              block,
+                               bool              partrd,
                                struct timespec * dl)
 {
         struct timespec   now;
@@ -2177,7 +2182,8 @@ static ssize_t flow_read_frcti(struct flow *     flow,
 
         while (true) {
                 flow_drain_rx_nb(flow);
-                bytes = FRCTI_CONSUME(flow->frcti, buf, count);
+
+                bytes = FRCTI_CONSUME(flow->frcti, buf, count, partrd);
                 if (bytes >= 0)
                         break;
                 if (bytes != -EAGAIN)
@@ -2248,7 +2254,7 @@ ssize_t flow_read(int    fd,
 
         idx = flow->part_idx;
         if (idx < 0 && flow->frcti != NULL)
-                return flow_read_frcti(flow, buf, count, block, dl);
+                return flow_read_frcti(flow, buf, count, block, partrd, dl);
 
         if (idx < 0) {
                 idx = raw_flow_read_pkt(flow, block, dl);
@@ -2863,18 +2869,18 @@ int ipcp_flow_read(int                   fd,
          * stalling every read after this one.
          */
         if (len > frcti_get_max_rcv_sdu(flow->frcti)) {
-                (void) FRCTI_CONSUME(flow->frcti, NULL, 0);
+                (void) FRCTI_CONSUME(flow->frcti, NULL, 0, false);
                 return -EMSGSIZE;
         }
 
         idx = ssm_pool_alloc_b(proc.pool, len, &ptr, &out, NULL);
         if (idx < 0) {
                 if (idx == -EMSGSIZE)
-                        (void) FRCTI_CONSUME(flow->frcti, NULL, 0);
+                        (void) FRCTI_CONSUME(flow->frcti, NULL, 0, false);
                 return (int) idx;
         }
 
-        fret = FRCTI_CONSUME(flow->frcti, ptr, len);
+        fret = FRCTI_CONSUME(flow->frcti, ptr, len, false);
         if (fret < 0 || (size_t) fret != len) {
                 ssm_pool_remove(proc.pool, idx);
                 return fret < 0 ? (int) fret : -EIO;
