@@ -23,6 +23,8 @@
 #include "mb-ecn.c"
 #include <test/test.h>
 
+#include <math.h>
+
 #define MS (MILLION) /* one millisecond in ns */
 #define LEN 1000    /* default packet size (bytes) */
 
@@ -73,14 +75,19 @@ static struct mb_ecn_ctx * mk_ctx(void)
  * LAB_SAMPLE drains the link between sends, so feedback queued by a
  * departure is due on time even while every flow sits idle. With
  * cfg.shared every flow runs on one ctx, as a production build does,
- * and the flow count follows t0, t1 and the churn period.
+ * and the flow count follows t0, t1 and the churn period. A full
+ * buffer blocks the writer, as a ring on the same host does, or with
+ * cfg.lossy drops the packet, as the far side of a physical link does
+ * (poa_rx_pkt): nothing then tells the sender it is not getting
+ * through.
  *
  * The fixpoint tests assert; the sweep always returns success: an
  * instrument, not a regression test.
  * ------------------------------------------------------------------
  */
 
-#define LAB_MAXF   8                  /* most flows on one link     */
+#define LAB_MAXF   64                 /* most flows on one link     */
+#define LAB_N8     8                  /* flows in the n8 fixpoints  */
 #define LAB_FIFO   16384              /* bottleneck ring, packets   */
 #define LAB_FBQ    64                 /* pending feedback ring      */
 #define LAB_NONE   UINT64_MAX         /* no pending event           */
@@ -126,6 +133,7 @@ struct lab_flow {
         uint64_t            hold_ns;        /* time with ai_hold set      */
         uint64_t            lim_ns;         /* time src_limited (latch)   */
         uint64_t            idl_ns;         /* time the backlog test off  */
+        uint64_t            n_loss;         /* loss cuts, kept past free  */
 };
 
 struct lab_link {
@@ -145,6 +153,7 @@ struct lab_link {
         uint64_t       e_ns;          /* empty time past warmup     */
         size_t         e_eps;         /* empty episodes past warmup */
         uint64_t       dlv;           /* delivered bytes            */
+        uint64_t       drops;         /* dropped bytes past warmup  */
 };
 
 struct lab_cfg {
@@ -154,21 +163,23 @@ struct lab_cfg {
         uint64_t     wu;            /* warmup excluded (ns)       */
         size_t       len;           /* packet size (bytes)        */
         uint64_t     qmax;          /* bytes                      */
+        bool         lossy;         /* full buffer drops, no block */
         size_t       n;             /* flows, up to LAB_MAXF      */
         uint64_t     ia[LAB_MAXF];  /* app interval, 0 = greedy   */
         uint64_t     lag[LAB_MAXF]; /* one-way feedback lag (ns)  */
         bool         no_loc;        /* disable local-mark path    */
         uint64_t     st_d;          /* service stall length (ns)  */
         uint64_t     st_p;          /* stall period, 0 = never    */
-        unsigned     st_f;          /* stalled-flow mask, 0 = all */
+        uint64_t     st_f;          /* stalled-flow mask, 0 = all */
         uint64_t     t0[LAB_MAXF];  /* flow start offsets (ns)    */
         uint64_t     t1[LAB_MAXF];  /* flow stop, 0 = runs to end */
         uint64_t     r0[LAB_MAXF];  /* seed rate, 0 = slow start  */
         uint64_t     sc_lo;         /* score window (ns), as the  */
         uint64_t     sc_hi;         /*   integration test scores  */
-        bool         shared;        /* one ctx for every flow     */
+        bool         shared;        /* one ctx per group of flows */
+        uint8_t      grp[LAB_MAXF]; /* ctx group when shared      */
         uint64_t     ch_p;          /* churn period, 0 = never    */
-        unsigned     ch_f;          /* churning flow mask         */
+        uint64_t     ch_f;          /* churning flow mask         */
 };
 
 static struct lab_link lab_lnk;
@@ -176,6 +187,7 @@ static struct lab_flow lab_fl[LAB_MAXF];
 static uint64_t        lab_sc_lo;
 static uint64_t        lab_sc_hi;
 static size_t          lab_len;
+static bool            lab_lossy;
 
 /*
  * Does flow i hold the ctx at t? A churning flow holds it for the
@@ -197,18 +209,32 @@ static bool lab_up(const struct lab_cfg * c,
         return t % c->ch_p < c->ch_p / 2;
 }
 
-/* Flows holding the ctx at t, the count ca_ctx_get refcounts. */
+/* Flows holding flow i's ctx at t, the count ca_ctx_get refcounts. */
 static size_t lab_live(const struct lab_cfg * c,
+                       size_t                 i,
                        uint64_t               t)
 {
         size_t n = 0;
-        size_t i;
+        size_t j;
 
-        for (i = 0; i < c->n; i++)
-                if (lab_up(c, i, t))
+        for (j = 0; j < c->n; j++)
+                if (c->grp[j] == c->grp[i] && lab_up(c, j, t))
                         n++;
 
         return n > 0 ? n : 1;
+}
+
+/* The first flow of i's group owns the group's ctx pair. */
+static size_t lab_owner(const struct lab_cfg * c,
+                        size_t                 i)
+{
+        size_t j;
+
+        for (j = 0; j < i; j++)
+                if (c->grp[j] == c->grp[i])
+                        return j;
+
+        return i;
 }
 
 /* The bottleneck marks with the production function, nothing else. */
@@ -343,10 +369,13 @@ static bool lab_send(struct lab_link * l,
         uint64_t dep;
         uint8_t  ecn;
         time_t   w;
+        bool     full;
 
         lab_service(l, t, wu);
 
-        if (l->q + lab_len > l->qmax) {     /* blocking write */
+        full = l->q + lab_len > l->qmax;
+
+        if (full && !lab_lossy) {           /* blocking write */
                 f->t_snd = l->pk[l->h].dep;
                 return false;
         }
@@ -372,13 +401,19 @@ static bool lab_send(struct lab_link * l,
 
         lab_q_acct(l, t, wu);
 
-        dep = (t > l->t_srv ? t : l->t_srv) + lab_len * BILLION / l->cap;
-        l->t_srv = dep;
-        l->pk[(l->h + l->n) % LAB_FIFO].dep = dep;
-        l->pk[(l->h + l->n) % LAB_FIFO].ecn = ecn;
-        l->pk[(l->h + l->n) % LAB_FIFO].f   = (uint8_t) fi;
-        l->n++;
-        l->q += lab_len;
+        if (full) {                         /* lossy: paced, then lost */
+                if (t >= wu)
+                        l->drops += lab_len;
+        } else {
+                dep = (t > l->t_srv ? t : l->t_srv)
+                      + lab_len * BILLION / l->cap;
+                l->t_srv = dep;
+                l->pk[(l->h + l->n) % LAB_FIFO].dep = dep;
+                l->pk[(l->h + l->n) % LAB_FIFO].ecn = ecn;
+                l->pk[(l->h + l->n) % LAB_FIFO].f   = (uint8_t) fi;
+                l->n++;
+                l->q += lab_len;
+        }
 
         if (mb_ecn_ctx_hb_due(f->snd, t) && f->hb_t == LAB_NONE) {
                 f->hb_rtt = l->q * BILLION / l->cap + 2 * f->lag;
@@ -453,9 +488,9 @@ static void lab_run(const struct lab_cfg * c)
                 struct lab_flow * f = &lab_fl[i];
 
                 /* Production interns one ctx per (peer, qos cube). */
-                if (c->shared && i > 0) {
-                        f->snd = lab_fl[0].snd;
-                        f->rcv = lab_fl[0].rcv;
+                if (c->shared && lab_owner(c, i) != i) {
+                        f->snd = lab_fl[lab_owner(c, i)].snd;
+                        f->rcv = lab_fl[lab_owner(c, i)].rcv;
                 } else {
                         f->snd = mk_ctx();
                         f->rcv = mk_ctx();
@@ -489,6 +524,7 @@ static void lab_run(const struct lab_cfg * c)
         }
 
         lab_len   = c->len;
+        lab_lossy = c->lossy;
         lab_sc_lo = c->sc_lo;
         lab_sc_hi = c->sc_hi;
 
@@ -507,7 +543,7 @@ static void lab_run(const struct lab_cfg * c)
                  */
                 if (st_t != LAB_NONE && smp >= st_t) {
                         uint64_t end = st_t + c->st_d;
-                        unsigned msk = c->st_f == 0 ? 3 : c->st_f;
+                        uint64_t msk = c->st_f == 0 ? 3 : c->st_f;
 
                         for (i = 0; i < c->n; i++)
                                 if (((msk >> i) & 1) && lab_fl[i].t_snd < end)
@@ -558,7 +594,7 @@ static void lab_run(const struct lab_cfg * c)
                 switch (ev % 4) {
                 case 0:
                         (void) lab_send(l, &lab_fl[i], i,
-                                        c->shared ? lab_live(c, nxt) : 1,
+                                        c->shared ? lab_live(c, i, nxt) : 1,
                                         c->wu, c->no_loc);
                         break;
                 case 1:
@@ -618,7 +654,9 @@ static void lab_run(const struct lab_cfg * c)
                        100.0 * (double) f->idl_ns / (double) span,
                        s->n_loss);
 
-                if (c->shared && i > 0)
+                f->n_loss = s->n_loss;
+
+                if (c->shared && lab_owner(c, i) != i)
                         continue;
 
                 mb_ecn_ctx_destroy(f->snd);
@@ -628,8 +666,8 @@ static void lab_run(const struct lab_cfg * c)
         return;
  fail_ctx:
         for (i = 0; i < c->n; i++) {
-                if (c->shared && i > 0)
-                        break;
+                if (c->shared && lab_owner(c, i) != i)
+                        continue;
 
                 mb_ecn_ctx_destroy(lab_fl[i].snd);
                 mb_ecn_ctx_destroy(lab_fl[i].rcv);
@@ -779,7 +817,7 @@ static int test_mb_ecn_lab_fixpoint_all(void)
 }
 
 /* Seed weights: even, graded, and graded reversed. */
-static const unsigned lab_n8_w[3][LAB_MAXF] = {
+static const unsigned lab_n8_w[3][LAB_N8] = {
         { 1, 1, 1, 1, 1, 1, 1, 1 },
         { 1, 2, 3, 4, 5, 6, 7, 8 },
         { 8, 7, 6, 5, 4, 3, 2, 1 }
@@ -821,7 +859,7 @@ static int test_mb_ecn_lab_fixpoint_n8(uint64_t cap,
         TEST_START("(%" PRIu64 " kb/s, lag %" PRIu64 " ms)", kb, ms);
 
         for (i = 0; i < 3; i++) {
-                lab_cfg_std(&c, "fixpoint-n8", cap, LAB_MAXF);
+                lab_cfg_std(&c, "fixpoint-n8", cap, LAB_N8);
 
                 /* 10 Gb/s carries 9000 B frames; below 1 Gb/s, 1000 B. */
                 c.len  = cap >= 125000000 ? 9000 : LEN;
@@ -829,10 +867,10 @@ static int test_mb_ecn_lab_fixpoint_n8(uint64_t cap,
 
                 sum = 0;
 
-                for (j = 0; j < LAB_MAXF; j++)
+                for (j = 0; j < LAB_N8; j++)
                         sum += lab_n8_w[i][j];
 
-                for (j = 0; j < LAB_MAXF; j++) {
+                for (j = 0; j < LAB_N8; j++) {
                         c.ia[j]  = 0;          /* all greedy */
                         c.t0[j]  = 0;
                         c.lag[j] = lag;
@@ -850,7 +888,7 @@ static int test_mb_ecn_lab_fixpoint_n8(uint64_t cap,
                 lo  = lab_fl[0].dlv2;
                 hi  = lab_fl[0].dlv2;
 
-                for (j = 0; j < LAB_MAXF; j++) {
+                for (j = 0; j < LAB_N8; j++) {
                         tot += lab_fl[j].dlv2;
                         if (lab_fl[j].dlv2 < lo)
                                 lo = lab_fl[j].dlv2;
@@ -954,26 +992,25 @@ static void lab_cfg_shared(struct lab_cfg * c,
  *
  * This is what a production build runs: ca_ctx_get interns one ctx
  * per (peer, qos cube), so rate, vt and the mark are shared and the
- * start tag is all a flow owns. The pacer then admits n * rate, so
- * the attractor for rate is C / n, and the offered load the ctx
- * measures is n flows' bytes against one flow's rate.
+ * start tag is all a flow owns. The rate is the path's: the pacer
+ * admits it once for the ctx and the tags divide it, so the
+ * attractor for rate is C whatever n, each flow lands on C / n, and
+ * the offered load the ctx measures is the n flows' bytes against
+ * that one rate.
  * ------------------------------------------------------------------
  */
 
 /*
- * Spread the shared attractor may sit in and still count as a
- * per-flow share. The flows share one virtual clock, so the pacer
- * fires them in one burst per tick; where that burst is a large part
- * of the bandwidth-delay product the quarter-log2 mark prices it as
- * a queue and the loop settles into a deep sawtooth, down to ~0.55
- * of C / n around 10 Mb/s at 1 kB packets. The band carries that and
- * is still an order of magnitude under the path rate C.
+ * Spread the shared attractor may sit in and still count as the path
+ * rate. One controller prices the queue (ecn* = 3), and the FIFO
+ * admission spreads a round over its length, so the aggregate holds
+ * the link the way a single flow does.
  */
-#define LAB_SHR_LO 0.45
-#define LAB_SHR_HI 1.10
+#define LAB_SHR_LO 0.90
+#define LAB_SHR_HI 1.05
 
-/* Peak of the same sawtooth, over the settled window. */
-#define LAB_SHR_PK 1.35
+/* Peak of the rate over the settled window. */
+#define LAB_SHR_PK 1.25
 
 /* One even split across the flows sharing the ctx. */
 #define LAB_SHR_JN 0.98
@@ -1007,11 +1044,11 @@ static int test_mb_ecn_lab_shared(uint64_t cap,
                 c.t1[i] = 2 * tc;
         }
 
-        fair = cap / nl;
+        fair = cap;   /* the ctx's rate is the path's, whatever nl */
 
         /*
          * Warmup ends at the last change, so r_hi is the peak of the
-         * epoch that has to settle back to the new share.
+         * epoch that has to settle back to the path rate.
          */
         c.dur   = 2 * tc + 60ULL * BILLION;
         c.wu    = churn ? 2 * tc : 40ULL * BILLION;
@@ -1059,13 +1096,13 @@ static int test_mb_ecn_lab_shared(uint64_t cap,
 #define LAB_SRC_DIV 4
 
 /*
- * mb_ecn_ceiling admits twice the load ONE flow offers. The slack
- * covers the additive increase banked between two window closes and
- * the truncation in sharing the offered bytes out. Reading the whole
- * ctx's load as one flow's puts the bound n times higher, so a wide
- * slack still separates the two.
+ * mb_ecn_ceiling admits 4/3 of the load the ctx offers as a whole.
+ * The slack covers the additive increase banked between two window
+ * closes. A ctx that read its load per flow, or let one flow's share
+ * run to the whole rate, would sit n times higher, so a wide slack
+ * still separates the two.
  */
-#define LAB_SRC_CEIL 2.5
+#define LAB_SRC_CEIL 2.0
 
 /* Churn half-period; below CA_SND_WIN no window would ever close. */
 #define LAB_SRC_CHP (100 * MS)
@@ -1116,10 +1153,10 @@ static int test_mb_ecn_lab_shared_load(uint64_t cap,
         ns   = churn ? n / 4 : 0;
         jain = lab_jain(ns, n);
 
-        if (hi > (uint64_t) (LAB_SRC_CEIL * (double) off)) {
-                printf("rate peaked at %.2f of the %" PRIu64 " offered, "
-                       "%.2f of the %" PRIu64 " path.\n",
-                       (double) hi / (double) off, off,
+        if (hi > (uint64_t) (LAB_SRC_CEIL * (double) (n * off))) {
+                printf("rate peaked at %.2f of the %" PRIu64 " offered "
+                       "together, %.2f of the %" PRIu64 " path.\n",
+                       (double) hi / (double) (n * off), n * off,
                        (double) hi / (double) cap, cap);
                 goto fail;
         }
@@ -1136,6 +1173,404 @@ static int test_mb_ecn_lab_shared_load(uint64_t cap,
  fail:
         TEST_FAIL("(%" PRIu64 " kb/s, %zu flows%s)", kb, n,
                   churn ? ", churn" : "");
+        return TEST_RC_FAIL;
+}
+
+/* Split each ctx may sit at: the integration tests' own criterion. */
+#define LAB_FORK_TOL 0.25
+
+/* Aggregate the fork has to carry for a run to say anything at all. */
+#define LAB_FORK_UTIL 0.90
+
+/* Did a ctx carry half the link, to the fork tolerance? */
+static bool lab_half(uint64_t bytes,
+                     uint64_t link)
+{
+        double lo = (1.0 - LAB_FORK_TOL) * (double) link / 2;
+        double hi = (1.0 + LAB_FORK_TOL) * (double) link / 2;
+
+        return (double) bytes >= lo && (double) bytes <= hi;
+}
+
+/*
+ * Fork: one greedy flow on its own ctx against nb on another, one
+ * bottleneck, as sources a and b of the integration fork topology.
+ * The unit of control is the path, so the two ctxs split the link
+ * evenly and ctx b's flows split its half evenly. A pacer that hands
+ * every flow the whole rate gives b nb / (nb + 1) of the link.
+ */
+static int test_mb_ecn_lab_fork(uint64_t cap,
+                                size_t   nb)
+{
+        static struct lab_cfg c;
+        uint64_t              kb = cap * 8 / 1000;
+        uint64_t              a;
+        uint64_t              b = 0;
+        uint64_t              link;
+        double                jain;
+        size_t                i;
+
+        TEST_START("(%" PRIu64 " kb/s, 1 + %zu flows)", kb, nb);
+
+        lab_cfg_shared(&c, "fork", cap, 1 + nb);
+
+        for (i = 1; i <= nb; i++)
+                c.grp[i] = 1;
+
+        c.dur   = 60ULL * BILLION;
+        c.wu    = 30ULL * BILLION;
+        c.sc_lo = 30ULL * BILLION;
+        c.sc_hi = 60ULL * BILLION;
+
+        lab_run(&c);
+
+        a = lab_fl[0].dlv2;
+        for (i = 1; i <= nb; i++)
+                b += lab_fl[i].dlv2;
+
+        link = cap * ((c.sc_hi - c.sc_lo) / BILLION);
+
+        if (a + b < (uint64_t) (LAB_FORK_UTIL * (double) link)) {
+                printf("fork carried %.2f of the link.\n",
+                       (double) (a + b) / (double) link);
+                goto fail;
+        }
+
+        if (!lab_half(a, link) || !lab_half(b, link)) {
+                printf("ctx split %.2f / %.2f of the link.\n",
+                       (double) a / (double) link,
+                       (double) b / (double) link);
+                goto fail;
+        }
+
+        jain = lab_jain(1, 1 + nb);
+        if (jain < LAB_SHR_JN) {
+                printf("fairness %.4f across %zu flows on one ctx.\n",
+                       jain, nb);
+                goto fail;
+        }
+
+        TEST_SUCCESS("(%" PRIu64 " kb/s, 1 + %zu flows)", kb, nb);
+
+        return TEST_RC_SUCCESS;
+ fail:
+        TEST_FAIL("(%" PRIu64 " kb/s, 1 + %zu flows)", kb, nb);
+        return TEST_RC_FAIL;
+}
+
+/*
+ * ------------------------------------------------------------------
+ * The gate: n controllers past the reference mark.
+ *
+ * Below the gate the law is ecn* = n + 2 and every controller holds
+ * ai / (m / m_ref - 1 / T_probe). At the gate the increase is held
+ * and the capacity floor lifts, so the controllers shed until the
+ * queue drains instead of parking on the floor: aggregate demand
+ * stays at the link whatever n, where the ungated law leaves it at
+ * n / 30 of the link once the mark saturates.
+ * ------------------------------------------------------------------
+ */
+
+/* Aggregate demand the controllers may hold against the link. */
+#define LAB_GATE_DEMAND 1.25
+
+/* Link utilisation a gated population must still deliver. */
+#define LAB_GATE_UTIL 0.85
+
+/* Even split across n controllers seeded alike. */
+#define LAB_GATE_JN 0.95
+
+
+/* Split n controllers reach from a geometric spread of seeds. */
+#define LAB_GATE_CONV 0.95
+
+/* Share of the run a controller on a live long path may sit held. */
+#define LAB_GATE_HOLD 0.5
+
+/* Summary of the last run: demand, utilisation, hold fraction. */
+struct lab_sum {
+        double demand;                /* sum of mean rates / cap    */
+        double util;                  /* link bytes delivered / cap */
+        double hold;                  /* time held, per controller  */
+        double mark;                  /* mean mark (ecn)            */
+        double jain;                  /* over the score window      */
+        double   loss;                /* dropped / offered at link  */
+        size_t starved;               /* flows with no score bytes  */
+        uint64_t cuts;                /* loss cuts, all flows       */
+};
+
+static void lab_summary(const struct lab_cfg * c,
+                        struct lab_sum *       s)
+{
+        uint64_t span = c->dur - c->wu;
+        double   secs = (double) span / BILLION;
+        double   sum  = 0.0;
+        double   hold = 0.0;
+        size_t   i;
+
+        s->starved = 0;
+        s->cuts    = 0;
+
+        for (i = 0; i < c->n; i++) {
+                sum  += (double) lab_fl[i].r_int / (double) span;
+                hold += (double) lab_fl[i].hold_ns / (double) span;
+                s->cuts += lab_fl[i].n_loss;
+                if (lab_fl[i].dlv2 == 0)
+                        s->starved++;
+        }
+
+        s->demand = sum / (double) c->cap;
+        s->util   = (double) lab_lnk.dlv / ((double) c->cap * secs);
+        s->hold   = hold / (double) c->n;
+        s->mark   = (double) lab_lnk.mk_int / (double) span / 32.0;
+        s->jain   = lab_jain(0, c->n);
+        s->loss   = (double) lab_lnk.drops
+                    / (double) (lab_lnk.dlv + lab_lnk.drops + 1);
+
+        printf("  n %2zu demand %.3f util %.3f loss %4.1f%% mark %5.1f "
+               "hold %4.1f%% jain %.4f empty %4.1f%% (%zu eps) cuts %"
+               PRIu64 "\n",
+               c->n, s->demand, s->util, 100.0 * s->loss, s->mark,
+               100.0 * s->hold, s->jain,
+               100.0 * (double) lab_lnk.e_ns / (double) span,
+               lab_lnk.e_eps, s->cuts);
+}
+
+/* The production ring's ceiling: 10 ms of drain, 4 to 959 slots. */
+static size_t lab_ring(uint64_t cap,
+                       size_t   len)
+{
+        uint64_t slots = cap / 100 / len;
+
+        if (slots < 4)
+                return 4;
+
+        return slots > 959 ? 959 : (size_t) slots;
+}
+
+/*
+ * Greedy controllers on their own ctxs, seeded at the split, across
+ * a lossy boundary with qpkts of buffer: nothing but the mark tells
+ * them they are too many.
+ */
+static void lab_cfg_gate(struct lab_cfg * c,
+                         const char *     name,
+                         uint64_t         cap,
+                         size_t           n,
+                         size_t           qpkts)
+{
+        size_t i;
+
+        lab_cfg_std(c, name, cap, n);
+
+        c->qmax  = qpkts * c->len;
+        c->lossy = true;
+
+        for (i = 0; i < n; i++) {
+                c->ia[i]  = 0;
+                c->t0[i]  = 0;
+                c->lag[i] = 2 * MS;
+                c->r0[i]  = cap / n;
+        }
+
+        c->dur   = 60ULL * BILLION;
+        c->wu    = 30ULL * BILLION;
+        c->sc_lo = 30ULL * BILLION;
+        c->sc_hi = 60ULL * BILLION;
+}
+
+/*
+ * Sweep n across the gate. Under it the law holds; past it the
+ * controllers cycle around the gate rather than sum to n / 30. The
+ * hold outlives the drain by a pricing window, so the release blast
+ * is the aggregate slope over that window, n * C'/16 * T_w; up to
+ * nmax it fits the buffer and demand, utilisation and fairness are
+ * bounded. Past it the blast overfills the buffer every cycle and
+ * the drops ration by lottery, and only starvation and the drain are
+ * asserted: the queue still empties where it once stayed pinned.
+ */
+static int test_mb_ecn_lab_gate_sweep(uint64_t cap,
+                                      size_t   qpkts,
+                                      size_t   nmax)
+{
+        static const size_t   n[] = { 2, 4, 8, 16, 32, 64 };
+        static struct lab_cfg c;
+        struct lab_sum        s;
+        uint64_t              kb  = cap * 8 / 1000;
+        size_t                bad = 0;
+        size_t                i;
+
+        TEST_START("(%" PRIu64 " kb/s, %zu pkt buffer, n <= %zu)",
+                   kb, qpkts, nmax);
+
+        for (i = 0; i < sizeof(n) / sizeof(n[0]); i++) {
+                lab_cfg_gate(&c, "gate-sweep", cap, n[i], qpkts);
+
+                lab_run(&c);
+
+                lab_summary(&c, &s);
+
+                if (s.starved > 0) {
+                        printf("n %zu starved %zu flows.\n", n[i], s.starved);
+                        bad++;
+                }
+
+                /* The law's queue is bounded; a pinned one never drains. */
+                if (lab_lnk.e_eps == 0) {
+                        printf("n %zu never drained the queue.\n", n[i]);
+                        bad++;
+                }
+
+                if (n[i] > nmax)
+                        continue;
+
+                if (s.demand > LAB_GATE_DEMAND) {
+                        printf("n %zu demands %.2f of the link.\n",
+                               n[i], s.demand);
+                        bad++;
+                }
+
+                if (s.util < LAB_GATE_UTIL) {
+                        printf("n %zu carried %.2f of the link.\n",
+                               n[i], s.util);
+                        bad++;
+                }
+
+                if (s.jain < LAB_GATE_JN) {
+                        printf("n %zu fairness %.4f.\n", n[i], s.jain);
+                        bad++;
+                }
+        }
+
+        if (bad > 0)
+                goto fail;
+
+        TEST_SUCCESS("(%" PRIu64 " kb/s, %zu pkt buffer, n <= %zu)",
+                     kb, qpkts, nmax);
+
+        return TEST_RC_SUCCESS;
+ fail:
+        TEST_FAIL("(%" PRIu64 " kb/s, %zu pkt buffer, n <= %zu)",
+                  kb, qpkts, nmax);
+        return TEST_RC_FAIL;
+}
+
+/*
+ * Past the gate, from a geometric spread of seeds: the increase only
+ * runs below the gate, and that is what has to bring the shares
+ * together. A gate that removed the increase (ai = 0) would leave
+ * the spread where it started.
+ */
+static int test_mb_ecn_lab_gate_converge(uint64_t cap,
+                                         size_t   n,
+                                         double   spread)
+{
+        static struct lab_cfg c;
+        struct lab_sum        s;
+        uint64_t              kb = cap * 8 / 1000;
+        double                fair = (double) cap / (double) n;
+        double                e;
+        size_t                i;
+
+        TEST_START("(%" PRIu64 " kb/s, %zu flows, %.0fx)", kb, n, spread);
+
+        lab_cfg_gate(&c, "gate-conv", cap, n, lab_ring(cap, LEN));
+
+        for (i = 0; i < n; i++) {
+                e = 2.0 * (double) i / (double) (n - 1) - 1.0;
+                c.r0[i] = (uint64_t) (fair * pow(spread, e));
+        }
+
+        c.dur   = 90ULL * BILLION;
+        c.wu    = 60ULL * BILLION;
+        c.sc_lo = 60ULL * BILLION;
+        c.sc_hi = 90ULL * BILLION;
+
+        lab_run(&c);
+
+        lab_summary(&c, &s);
+
+        if (s.starved > 0) {
+                printf("starved %zu flows.\n", s.starved);
+                goto fail;
+        }
+
+        if (s.demand > LAB_GATE_DEMAND) {
+                printf("demands %.2f of the link.\n", s.demand);
+                goto fail;
+        }
+
+        if (s.jain < LAB_GATE_CONV) {
+                printf("fairness %.4f from a %.0fx spread.\n", s.jain, spread);
+                goto fail;
+        }
+
+        TEST_SUCCESS("(%" PRIu64 " kb/s, %zu flows, %.0fx)", kb, n, spread);
+
+        return TEST_RC_SUCCESS;
+ fail:
+        TEST_FAIL("(%" PRIu64 " kb/s, %zu flows, %.0fx)", kb, n, spread);
+        return TEST_RC_FAIL;
+}
+
+/*
+ * Long path: two greedy flows behind a feedback lag of a few hundred
+ * ms (RTT 0.6 s and up). Feedback comes once a pricing window
+ * whatever the RTT, so the stale trigger has nothing to fire on. What
+ * used to fire was the liveness detector, past RTT ~0.54 s, on a path
+ * that is not congested, since its horizon was the feedback TTL with
+ * no RTT term; each cut held the increase and nothing released it
+ * (measured: held 100% of the time, a fifth of the link). The
+ * horizon now follows the heartbeat: no cuts, no standing hold, and
+ * the flows claim the link.
+ */
+static int test_mb_ecn_lab_long_rtt(uint64_t cap,
+                                    uint64_t lag)
+{
+        static struct lab_cfg c;
+        struct lab_sum        s;
+        uint64_t              kb = cap * 8 / 1000;
+        uint64_t              ms = lag / MS;
+        size_t                i;
+
+        TEST_START("(%" PRIu64 " kb/s, lag %" PRIu64 " ms)", kb, ms);
+
+        lab_cfg_gate(&c, "long-rtt", cap, 2, lab_ring(cap, LEN));
+
+        for (i = 0; i < 2; i++)
+                c.lag[i] = lag;
+
+        lab_run(&c);
+
+        lab_summary(&c, &s);
+
+        if (s.starved > 0) {
+                printf("starved %zu flows.\n", s.starved);
+                goto fail;
+        }
+
+        if (s.cuts > 0) {
+                printf("%" PRIu64 " loss cuts on an uncongested path.\n",
+                       s.cuts);
+                goto fail;
+        }
+
+        if (s.hold > LAB_GATE_HOLD) {
+                printf("held %.0f%% of the run on a live path.\n",
+                       100.0 * s.hold);
+                goto fail;
+        }
+
+        if (s.util < LAB_GATE_UTIL) {
+                printf("carried %.2f of the link.\n", s.util);
+                goto fail;
+        }
+
+        TEST_SUCCESS("(%" PRIu64 " kb/s, lag %" PRIu64 " ms)", kb, ms);
+
+        return TEST_RC_SUCCESS;
+ fail:
+        TEST_FAIL("(%" PRIu64 " kb/s, lag %" PRIu64 " ms)", kb, ms);
         return TEST_RC_FAIL;
 }
 
@@ -1286,6 +1721,21 @@ int mb_ecn_lab_test(int     argc,
         ret |= test_mb_ecn_lab_shared_load(1250000, 8, false);
         ret |= test_mb_ecn_lab_shared_load(1250000, 5, true);
         ret |= test_mb_ecn_lab_shared_load(1250000, 8, true);
+        ret |= test_mb_ecn_lab_fork(1250000, 5);
+        /*
+         * The production ring at 100 Mb/s (125 slots), and a POA's
+         * socket buffer (90 frames) at 10 Mb/s. At 10 Mb/s the pricing
+         * window past 16 controllers stretches over 200 ms (16 packets
+         * at under 78 kB/s) and the blast on release is a third of the
+         * link, so the envelope ends there.
+         */
+        ret |= test_mb_ecn_lab_gate_sweep(12500000, lab_ring(12500000, LEN),
+                                          64);
+        ret |= test_mb_ecn_lab_gate_sweep(1250000, 90, 16);
+        ret |= test_mb_ecn_lab_gate_converge(12500000, 16, 32.0);
+        ret |= test_mb_ecn_lab_gate_converge(12500000, 32, 32.0);
+        ret |= test_mb_ecn_lab_long_rtt(1250000, 300 * MS);
+        ret |= test_mb_ecn_lab_long_rtt(1250000, 400 * MS);
         ret |= test_mb_ecn_lab_fixpoint_all();
         ret |= test_mb_ecn_lab_fixpoint_n8_all();
         ret |= test_mb_ecn_lab();

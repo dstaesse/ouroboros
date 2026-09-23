@@ -66,7 +66,8 @@ target_include_directories(${PARENT_DIR}_lab_test PRIVATE
 )
 
 disable_test_logging_for_target(${PARENT_DIR}_lab_test)
-target_link_libraries(${PARENT_DIR}_lab_test PRIVATE ouroboros-common)
+target_link_libraries(${PARENT_DIR}_lab_test PRIVATE ouroboros-common
+                      ${LIBM_LIBRARIES})
 
 if(MB_ECN_LAB_FULL)
   target_compile_definitions(${PARENT_DIR}_lab_test PRIVATE MB_ECN_LAB_FULL)

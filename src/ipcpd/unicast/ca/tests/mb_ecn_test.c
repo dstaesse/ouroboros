@@ -95,8 +95,8 @@ static int test_mb_ecn_ctx_create_destroy(void)
                 goto fail_ctx;
         }
 
-        if (ctx->rate_min != CA_RATE_MIN) {
-                printf("Bad initial floor %" PRIu64 ".\n", ctx->rate_min);
+        if (ctx->cap_rate != CA_RATE_MIN) {
+                printf("Bad initial floor %" PRIu64 ".\n", ctx->cap_rate);
                 goto fail_ctx;
         }
 
@@ -1043,7 +1043,11 @@ static int test_mb_ecn_multiplicative_decrease(void)
         return TEST_RC_FAIL;
 }
 
-/* The hold releases on any unsaturated mark, including above REF. */
+/*
+ * The hold releases on fresh feedback below the gate and on nothing
+ * above it: a standing mark of 20 controllers is unsaturated but at
+ * the gate, so it holds, where it once released below the clamp.
+ */
 static int test_mb_ecn_ai_hold_release(void)
 {
         struct mb_ecn_ctx * ctx;
@@ -1067,13 +1071,36 @@ static int test_mb_ecn_ai_hold_release(void)
                 goto fail_ctx;
         }
 
-        /* A standing mark of 20 flows is unsaturated: release. */
-        ctx->ai_hold = true;
-
+        /* A standing mark of 20 controllers is at the gate: hold. */
         mb_ecn_ece(ctx, 22 << CA_SHFT, 0, 2 * MS);
 
+        if (!ctx->ai_hold) {
+                printf("a mark above the gate released the hold.\n");
+                goto fail_ctx;
+        }
+
+        /* The gate itself holds; one step under it releases. */
+        mb_ecn_ece(ctx, CA_ECE_REF, 0, 3 * MS);
+
+        if (!ctx->ai_hold) {
+                printf("the reference mark released the hold.\n");
+                goto fail_ctx;
+        }
+
+        mb_ecn_ece(ctx, CA_ECE_REF - 1, 0, 4 * MS);
+
         if (ctx->ai_hold) {
-                printf("unsaturated feedback held the increase.\n");
+                printf("feedback below the gate held the increase.\n");
+                goto fail_ctx;
+        }
+
+        /* The ece 0 release is fresh feedback too. */
+        ctx->ai_hold = true;
+
+        mb_ecn_ece(ctx, 0, 0, 5 * MS);
+
+        if (ctx->ai_hold) {
+                printf("an ece 0 release held the increase.\n");
                 goto fail_ctx;
         }
 
@@ -1720,7 +1747,7 @@ static int test_mb_ecn_ece_ttl_tracks_rate(void)
         }
 
         ctx->rate     = 8192;
-        ctx->rate_min = 8192;
+        ctx->cap_rate = 8192;
         ctx->ai_rate  = 0;
         ctx->tx_cav   = true;
         mb_ecn_snd(ctx, 1400, MS, &ftag);
@@ -2071,13 +2098,13 @@ static int test_mb_ecn_ece_cap_derives_rates(void)
         mb_ecn_ece(ctx, 100, 120, MS);
 
         want = CA_RATE_MIN + ((tgt - CA_RATE_MIN) >> CA_CAP_SM_SHFT);
-        if (ctx->rate_min != want) {
+        if (ctx->cap_rate != want) {
                 printf("Floor: exp %" PRIu64 ", got %" PRIu64 ".\n",
-                       want, ctx->rate_min);
+                       want, ctx->cap_rate);
                 goto fail_ctx;
         }
 
-        if (ctx->ai_rate != 2 * ctx->rate_min) {
+        if (ctx->ai_rate != 2 * ctx->cap_rate) {
                 printf("AI slope did not track the floor.\n");
                 goto fail_ctx;
         }
@@ -2085,9 +2112,9 @@ static int test_mb_ecn_ece_cap_derives_rates(void)
         mb_ecn_ece(ctx, 100, 120, 2 * MS);
 
         want += (tgt - want) >> CA_CAP_SM_SHFT;
-        if (ctx->rate_min != want) {
+        if (ctx->cap_rate != want) {
                 printf("Floor EWMA: exp %" PRIu64 ", got %" PRIu64 ".\n",
-                       want, ctx->rate_min);
+                       want, ctx->cap_rate);
                 goto fail_ctx;
         }
 
@@ -2124,7 +2151,7 @@ static int test_mb_ecn_ece_cap_zero_keeps_rates(void)
 
         mb_ecn_ece(ctx, 100, 0, MS);
 
-        if (ctx->rate_min != CA_RATE_MIN || ctx->ai_rate != CA_AI_RATE) {
+        if (ctx->cap_rate != CA_RATE_MIN || ctx->ai_rate != CA_AI_RATE) {
                 printf("Unknown cap moved the derived rates.\n");
                 goto fail_ctx;
         }
@@ -2163,9 +2190,9 @@ static int test_mb_ecn_ece_cap_clamps(void)
         /* A path slower than the default floor cannot lower it. */
         mb_ecn_ece(ctx, 100, 1, MS);
 
-        if (ctx->rate_min != CA_RATE_MIN) {
+        if (ctx->cap_rate != CA_RATE_MIN) {
                 printf("Slow path lowered the floor: %" PRIu64 ".\n",
-                       ctx->rate_min);
+                       ctx->cap_rate);
                 goto fail_ctx;
         }
 
@@ -2173,15 +2200,15 @@ static int test_mb_ecn_ece_cap_clamps(void)
         for (i = 1; i <= 40; i++)
                 mb_ecn_ece(ctx, 100, 255, (1 + i) * MS);
 
-        if (ctx->rate_min > CA_RMIN_MAX) {
+        if (ctx->cap_rate > CA_RMIN_MAX) {
                 printf("Floor above the ceiling: %" PRIu64 ".\n",
-                       ctx->rate_min);
+                       ctx->cap_rate);
                 goto fail_ctx;
         }
 
-        if (ctx->rate_min < CA_RMIN_MAX - 4) {
+        if (ctx->cap_rate < CA_RMIN_MAX - 4) {
                 printf("Floor did not reach the ceiling: %" PRIu64 ".\n",
-                       ctx->rate_min);
+                       ctx->cap_rate);
                 goto fail_ctx;
         }
 
@@ -2213,7 +2240,7 @@ static int test_mb_ecn_cap_ttl_reverts(void)
 
         mb_ecn_ece(ctx, 100, 120, MS);
 
-        if (ctx->rate_min == CA_RATE_MIN) {
+        if (ctx->cap_rate == CA_RATE_MIN) {
                 printf("Capacity did not derive a floor.\n");
                 goto fail_ctx;
         }
@@ -2221,7 +2248,7 @@ static int test_mb_ecn_cap_ttl_reverts(void)
         /* Just inside the TTL: the derived rates hold. */
         mb_ecn_snd(ctx, LEN, MS + (ctx->ece_ttl << CA_CAP_TTL_SHFT), &ftag);
 
-        if (ctx->rate_min == CA_RATE_MIN) {
+        if (ctx->cap_rate == CA_RATE_MIN) {
                 printf("Derived rates reverted too early.\n");
                 goto fail_ctx;
         }
@@ -2230,7 +2257,7 @@ static int test_mb_ecn_cap_ttl_reverts(void)
         mb_ecn_snd(ctx, LEN, MS + (ctx->ece_ttl << CA_CAP_TTL_SHFT) + 1,
                    &ftag);
 
-        if (ctx->rate_min != CA_RATE_MIN || ctx->ai_rate != CA_AI_RATE) {
+        if (ctx->cap_rate != CA_RATE_MIN || ctx->ai_rate != CA_AI_RATE) {
                 printf("Stale capacity kept the derived rates.\n");
                 goto fail_ctx;
         }
@@ -2297,7 +2324,17 @@ static int test_mb_ecn_ctrl_per_ctx_ai(void)
 }
 
 /* The rate clamp honours the per-ctx derived floor. */
-static int test_mb_ecn_ctrl_per_ctx_floor(void)
+/*
+ * cap_rate seeds the slope and nothing else. It floored the rate
+ * once, and this scenario asserted that: 30 ms at the reference mark
+ * from just above it landed exactly on it. That floor is what pinned
+ * n > 32 controllers at n / 32 of the link. Now the reference mark
+ * holds the increase and the rate sheds straight through cap_rate;
+ * only CA_RATE_MIN is a floor. Below the gate the increase keeps a
+ * probing controller above 2 * cap_rate on its own (the fixpoint
+ * ai / (m / m_ref - 1 / T_probe) at m < m_ref), so nothing is lost.
+ */
+static int test_mb_ecn_ctrl_no_capacity_floor(void)
 {
         struct mb_ecn_ctx * ctx;
         uint64_t            ftag = 0;
@@ -2310,14 +2347,28 @@ static int test_mb_ecn_ctrl_per_ctx_floor(void)
                 goto fail;
         }
 
-        ctx->rate_min = (uint64_t) 1 << 20;
+        ctx->cap_rate = (uint64_t) 1 << 20;
+        ctx->ai_rate  = 2 * ctx->cap_rate;
+        ctx->tx_cap   = cap_enc((uint64_t) 1 << (20 + CA_CAP_SHFT));
         ctx->rate     = ((uint64_t) 1 << 20) + 1000;
 
         mb_ecn_ece(ctx, CA_ECE_REF, 0, 0);
         mb_ecn_snd(ctx, LEN, 30 * MS, &ftag);
 
-        if (ctx->rate != ctx->rate_min) {
-                printf("Floor not per-ctx: %" PRIu64 ".\n", ctx->rate);
+        if (!ctx->ai_hold) {
+                printf("not held at the reference mark.\n");
+                goto fail_ctx;
+        }
+
+        if (ctx->rate >= ctx->cap_rate) {
+                printf("cap_rate floored the rate: %" PRIu64 ".\n",
+                       ctx->rate);
+                goto fail_ctx;
+        }
+
+        if (ctx->rate < (uint64_t) CA_RATE_MIN) {
+                printf("absolute floor breached: %" PRIu64 ".\n",
+                       ctx->rate);
                 goto fail_ctx;
         }
 
@@ -2356,7 +2407,7 @@ static int test_mb_ecn_snd_slow_rate_paced(void)
 
         /* 8 KB/s, 1400 B packets: inter-send gap ~171 ms > CA_DT_CAP. */
         ctx->rate     = 8192;
-        ctx->rate_min = 8192;
+        ctx->cap_rate = 8192;
         ctx->ai_rate  = 0;
         ctx->inv_rate = mb_ecn_rate_inv(8192);
         ctx->tx_cav   = true;
@@ -2537,7 +2588,7 @@ static int test_mb_ecn_source_limited_ceiling(void)
         ctx->backlogged = false;
         ctx->rate       = (uint64_t) 100 << 20;
         ctx->inv_rate   = mb_ecn_rate_inv(ctx->rate);
-        ctx->rate_min   = (uint64_t) 50 << 20;
+        ctx->cap_rate   = (uint64_t) 50 << 20;
         ctx->snd_rate   = (uint64_t) 1 << 20;
         ctx->snd_r0     = ctx->rate;
         ctx->snd_win    = t;
@@ -2573,7 +2624,7 @@ static int test_mb_ecn_source_limited_ceiling(void)
         ctx->backlogged = false;
         ctx->rate       = (uint64_t) 100 << 20;
         ctx->inv_rate   = mb_ecn_rate_inv(ctx->rate);
-        ctx->rate_min   = (uint64_t) 50 << 20;
+        ctx->cap_rate   = (uint64_t) 50 << 20;
         ctx->snd_rate   = (uint64_t) 303 << 12;
         ctx->snd_r0     = ctx->rate;
         ctx->snd_win    = t;
@@ -2915,11 +2966,13 @@ static int test_mb_ecn_ramp_overshoot_grows_with_rtt(void)
 }
 
 /*
- * Flows sharing a context offer bytes together but each may send at
- * rate, so the window must be shared out before the backlog level is
- * read. Four flows offering two thirds of a share each stay below it.
+ * Flows sharing a context offer bytes together against one rate, the
+ * path's, so the window compares the two as they are. Four flows
+ * offering two thirds of the rate between them read source-limited;
+ * the whole rate between them reads backlogged, with no share-out by
+ * flow count in between.
  */
-static int test_mb_ecn_shared_ctx_offered_per_flow(void)
+static int test_mb_ecn_shared_ctx_offered_aggregate(void)
 {
         struct mb_ecn_ctx * ctx;
         uint64_t            rate = 1000000;
@@ -2936,22 +2989,22 @@ static int test_mb_ecn_shared_ctx_offered_per_flow(void)
         ctx->snd_flows = 4;
         ctx->snd_r0    = rate;
         ctx->snd_win   = 0;
-        ctx->snd_byt   = 4 * rate * 2 / 3;
+        ctx->snd_byt   = rate * 2 / 3;
 
         mb_ecn_win(ctx, BILLION);
 
         if (ctx->backlogged) {
-                printf("aggregate load read as one flow's backlog.\n");
+                printf("two thirds of the rate read as backlogged.\n");
                 goto fail_ctx;
         }
 
-        /* The close left a fresh window; a full share each clears it. */
-        ctx->snd_byt = 4 * rate;
+        /* The close left a fresh window; the whole rate clears it. */
+        ctx->snd_byt = rate;
 
         mb_ecn_win(ctx, 2 * BILLION);
 
         if (!ctx->backlogged) {
-                printf("per-flow share did not read as backlogged.\n");
+                printf("the whole rate was shared out by flow count.\n");
                 goto fail_ctx;
         }
 
@@ -3053,7 +3106,7 @@ static int test_mb_ecn_ceiling_clears_backlog(void)
         ctx->backlogged = false;
         ctx->snd_rate   = x;
         ctx->rate       = 100 * x;
-        ctx->rate_min   = CA_RATE_MIN;
+        ctx->cap_rate   = CA_RATE_MIN;
 
         mb_ecn_ceiling(ctx);
 
@@ -3074,6 +3127,854 @@ static int test_mb_ecn_ceiling_clears_backlog(void)
         if (!ctx->backlogged) {
                 printf("clamped at %" PRIu64 " cannot clear on %" PRIu64
                        ".\n", ctx->snd_r0, x);
+                goto fail_ctx;
+        }
+
+        mb_ecn_ctx_destroy(ctx);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_ctx:
+        mb_ecn_ctx_destroy(ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/*
+ * ------------------------------------------------------------------
+ * Flows sharing one ctx, read the way psched reads them: each flow
+ * holds the deadline the pacer set, the earliest due flow sends next,
+ * ties go round-robin, and a flow given no wait is read again in the
+ * next round. A greedy flow always has a packet; one past its stop
+ * time has none and no longer holds the ctx (ca_ctx_put).
+ * ------------------------------------------------------------------
+ */
+#define SH_MAXN 8
+
+struct sh_flow {
+        uint64_t ftag;
+        uint64_t due;        /* next read (ns), UINT64_MAX = gone */
+        size_t   len;
+        uint64_t t1;         /* stop time (ns), 0 = runs to end   */
+        uint64_t bytes;      /* admitted from t_from on           */
+};
+
+static struct mb_ecn_ctx * sh_ctx(uint64_t rate)
+{
+        struct mb_ecn_ctx * ctx;
+
+        ctx = mk_ctx();
+        if (ctx == NULL)
+                return NULL;
+
+        /* AIMD with no marks and the increase held: the rate stands. */
+        ctx->rate     = rate;
+        ctx->inv_rate = mb_ecn_rate_inv(rate);
+        ctx->tx_cav   = true;
+        ctx->ai_hold  = true;
+
+        return ctx;
+}
+
+/*
+ * Serve the flows on ctx from t to end, counting each flow's bytes
+ * from t_from and the widest run of packets admitted at one instant.
+ */
+static void sh_run(struct mb_ecn_ctx * ctx,
+                   struct sh_flow *    fl,
+                   size_t              n,
+                   uint64_t            t,
+                   uint64_t            end,
+                   uint64_t            t_from,
+                   size_t *            burst)
+{
+        uint64_t last = UINT64_MAX;
+        size_t   run  = 0;
+        size_t   k    = n - 1;
+        size_t   live;
+        size_t   i;
+        size_t   j;
+        time_t   w;
+
+        *burst = 0;
+
+        for (i = 0; i < n; i++) {
+                fl[i].due   = t;
+                fl[i].bytes = 0;
+        }
+
+        while (true) {
+                uint64_t nxt = UINT64_MAX;
+                size_t   pick = 0;
+
+                live = 0;
+
+                for (j = 0; j < n; j++) {
+                        i = (k + 1 + j) % n;
+
+                        if (fl[i].t1 > 0 && fl[i].due >= fl[i].t1)
+                                fl[i].due = UINT64_MAX;
+
+                        if (fl[i].due != UINT64_MAX)
+                                live++;
+
+                        if (fl[i].due < nxt) {
+                                nxt  = fl[i].due;
+                                pick = i;
+                        }
+                }
+
+                if (nxt >= end)
+                        break;
+
+                k = pick;
+
+                mb_ecn_flows(ctx, live, nxt);
+
+                w = mb_ecn_snd(ctx, fl[k].len, nxt, &fl[k].ftag);
+
+                if (nxt >= t_from) {
+                        fl[k].bytes += fl[k].len;
+                        run = nxt == last ? run + 1 : 1;
+                        if (run > *burst)
+                                *burst = run;
+                }
+
+                last      = nxt;
+                fl[k].due = nxt + (w > 0 ? (uint64_t) w : 0);
+        }
+}
+
+/* |got - want| <= want * pct / 100 */
+static bool sh_near(uint64_t got,
+                    uint64_t want,
+                    uint64_t pct)
+{
+        uint64_t tol = want * pct / 100;
+
+        return got + tol >= want && got <= want + tol;
+}
+
+/*
+ * Four greedy flows on one ctx divide its rate: together they admit
+ * the rate, each a quarter, the pacer counts four deferred flows, and
+ * a round goes out one packet at a time, not as a burst of four.
+ */
+static int test_mb_ecn_sfq_share_rate(void)
+{
+        struct mb_ecn_ctx * ctx;
+        struct sh_flow      fl[4];
+        uint64_t            rate = 1U << 20;
+        uint64_t            tot  = 0;
+        size_t              burst;
+        size_t              i;
+
+        TEST_START();
+
+        ctx = sh_ctx(rate);
+        if (ctx == NULL) {
+                printf("Failed to create context.\n");
+                goto fail;
+        }
+
+        memset(fl, 0, sizeof(fl));
+        for (i = 0; i < 4; i++)
+                fl[i].len = LEN;
+
+        /* 400 ms of warm-up, then one second scored. */
+        sh_run(ctx, fl, 4, 0, 1400 * MS, 400 * MS, &burst);
+
+        for (i = 0; i < 4; i++)
+                tot += fl[i].bytes;
+
+        if (!sh_near(tot, rate, 3)) {
+                printf("four flows admitted %" PRIu64 " at rate %" PRIu64
+                       ".\n", tot, rate);
+                goto fail_ctx;
+        }
+
+        for (i = 0; i < 4; i++) {
+                if (sh_near(fl[i].bytes, rate / 4, 5))
+                        continue;
+
+                printf("flow %zu got %" PRIu64 " of a %" PRIu64 " share.\n",
+                       i, fl[i].bytes, rate / 4);
+                goto fail_ctx;
+        }
+
+        if (!sh_near(ctx->snd_bl, 4ULL << CA_BL_SHFT, 12)) {
+                printf("pacer counts %" PRIu64 "/256 deferred flows, not 4.\n",
+                       ctx->snd_bl);
+                goto fail_ctx;
+        }
+
+        if (burst > 2) {
+                printf("%zu packets admitted at one instant.\n", burst);
+                goto fail_ctx;
+        }
+
+        mb_ecn_ctx_destroy(ctx);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_ctx:
+        mb_ecn_ctx_destroy(ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/*
+ * The share is in bytes: a flow of 9000 B packets and one of 1000 B
+ * packets split the rate evenly, nine small packets to one large.
+ */
+static int test_mb_ecn_sfq_share_bytes(void)
+{
+        struct mb_ecn_ctx * ctx;
+        struct sh_flow      fl[2];
+        uint64_t            rate = 1U << 20;
+        size_t              burst;
+
+        TEST_START();
+
+        ctx = sh_ctx(rate);
+        if (ctx == NULL) {
+                printf("Failed to create context.\n");
+                goto fail;
+        }
+
+        memset(fl, 0, sizeof(fl));
+        fl[0].len = 9000;
+        fl[1].len = 1000;
+
+        sh_run(ctx, fl, 2, 0, 3000 * MS, 1000 * MS, &burst);
+
+        if (!sh_near(fl[0].bytes + fl[1].bytes, 2 * rate, 3)) {
+                printf("two flows admitted %" PRIu64 " at rate %" PRIu64
+                       ".\n", fl[0].bytes + fl[1].bytes, rate);
+                goto fail_ctx;
+        }
+
+        if (!sh_near(fl[0].bytes, rate, 10)) {
+                printf("large packets got %" PRIu64 " of a %" PRIu64
+                       " share.\n", fl[0].bytes, rate);
+                goto fail_ctx;
+        }
+
+        if (!sh_near(fl[1].bytes, rate, 10)) {
+                printf("small packets got %" PRIu64 " of a %" PRIu64
+                       " share.\n", fl[1].bytes, rate);
+                goto fail_ctx;
+        }
+
+        mb_ecn_ctx_destroy(ctx);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_ctx:
+        mb_ecn_ctx_destroy(ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/*
+ * Two of four flows leave: within a few windows the two that stay
+ * have the whole rate between them and the pacer counts two.
+ */
+static int test_mb_ecn_sfq_leave(void)
+{
+        struct mb_ecn_ctx * ctx;
+        struct sh_flow      fl[4];
+        uint64_t            rate = 1U << 20;
+        size_t              burst;
+        size_t              i;
+
+        TEST_START();
+
+        ctx = sh_ctx(rate);
+        if (ctx == NULL) {
+                printf("Failed to create context.\n");
+                goto fail;
+        }
+
+        memset(fl, 0, sizeof(fl));
+        for (i = 0; i < 4; i++)
+                fl[i].len = LEN;
+
+        fl[2].t1 = BILLION;
+        fl[3].t1 = BILLION;
+
+        /* Score the second after 500 ms of settling past the leave. */
+        sh_run(ctx, fl, 4, 0, 2500 * MS, 1500 * MS, &burst);
+
+        if (!sh_near(fl[0].bytes + fl[1].bytes, rate, 3)) {
+                printf("two flows left admit %" PRIu64 " at rate %" PRIu64
+                       ".\n", fl[0].bytes + fl[1].bytes, rate);
+                goto fail_ctx;
+        }
+
+        if (!sh_near(fl[0].bytes, rate / 2, 5)) {
+                printf("flow 0 got %" PRIu64 " of a %" PRIu64 " share.\n",
+                       fl[0].bytes, rate / 2);
+                goto fail_ctx;
+        }
+
+        if (!sh_near(fl[1].bytes, rate / 2, 5)) {
+                printf("flow 1 got %" PRIu64 " of a %" PRIu64 " share.\n",
+                       fl[1].bytes, rate / 2);
+                goto fail_ctx;
+        }
+
+        if (!sh_near(ctx->snd_bl, 2ULL << CA_BL_SHFT, 12)) {
+                printf("pacer counts %" PRIu64 "/256 deferred flows, not 2.\n",
+                       ctx->snd_bl);
+                goto fail_ctx;
+        }
+
+        mb_ecn_ctx_destroy(ctx);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_ctx:
+        mb_ecn_ctx_destroy(ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/*
+ * A join widens the round at once, by the flows that joined; a leave
+ * is left to the window estimate, since the flow may not have been
+ * one the pacer was holding back.
+ */
+static int test_mb_ecn_flow_join_widens_round(void)
+{
+        struct mb_ecn_ctx * ctx;
+
+        TEST_START();
+
+        ctx = mk_ctx();
+        if (ctx == NULL) {
+                printf("Failed to create context.\n");
+                goto fail;
+        }
+
+        mb_ecn_flows(ctx, 3, MS);
+
+        if (ctx->snd_bl != 3ULL << CA_BL_SHFT) {
+                printf("two joins left the round at %" PRIu64 "/256.\n",
+                       ctx->snd_bl);
+                goto fail_ctx;
+        }
+
+        mb_ecn_flows(ctx, 2, 2 * MS);
+
+        if (ctx->snd_bl != 3ULL << CA_BL_SHFT) {
+                printf("a leave narrowed the round to %" PRIu64 "/256.\n",
+                       ctx->snd_bl);
+                goto fail_ctx;
+        }
+
+        mb_ecn_ctx_destroy(ctx);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_ctx:
+        mb_ecn_ctx_destroy(ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/*
+ * Five source-limited flows that write in step put five packets in at
+ * one instant every 40 ms, an eighth of the rate. The FIFO spreads the
+ * burst but that is not the pacer holding anyone to a share: the ctx
+ * reads source-limited, the ceiling lands on the load rather than the
+ * rate running away, and the spread never counts as a second deferred
+ * flow (the ceiling leaves the burst waiting a fraction of a round).
+ */
+static int test_mb_ecn_fifo_burst_not_backlogged(void)
+{
+        struct mb_ecn_ctx * ctx;
+        uint64_t            ftag[5];
+        uint64_t            rate = 1U << 20;
+        uint64_t            t;
+        size_t              i;
+
+        TEST_START();
+
+        ctx = sh_ctx(rate);
+        if (ctx == NULL) {
+                printf("Failed to create context.\n");
+                goto fail;
+        }
+
+        ctx->ai_hold = false;   /* let the increase run: it must not */
+
+        memset(ftag, 0, sizeof(ftag));
+
+        for (t = 0; t < 2 * BILLION; t += 40 * MS) {
+                mb_ecn_flows(ctx, 5, t);
+                for (i = 0; i < 5; i++)
+                        mb_ecn_snd(ctx, LEN, t, &ftag[i]);
+        }
+
+        if (ctx->backlogged) {
+                printf("a FIFO-spread burst read as backlogged.\n");
+                goto fail_ctx;
+        }
+
+        if (ctx->snd_bl >= 2ULL << CA_BL_SHFT) {
+                printf("a spread burst counts as %" PRIu64 "/256 deferred "
+                       "flows.\n", ctx->snd_bl);
+                goto fail_ctx;
+        }
+
+        if (ctx->rate >= rate) {
+                printf("rate ran off to %" PRIu64 " on an eighth load.\n",
+                       ctx->rate);
+                goto fail_ctx;
+        }
+
+        mb_ecn_ctx_destroy(ctx);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_ctx:
+        mb_ecn_ctx_destroy(ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/*
+ * ------------------------------------------------------------------
+ * The hold: gate, stale feedback, loss; one release.
+ * ------------------------------------------------------------------
+ */
+
+/* A context in AIMD on a scaled link, backlogged, at rate r. */
+static struct mb_ecn_ctx * hold_ctx(uint64_t r)
+{
+        struct mb_ecn_ctx * ctx;
+
+        ctx = mk_ctx();
+        if (ctx == NULL)
+                return NULL;
+
+        ctx->rate     = r;
+        ctx->inv_rate = mb_ecn_rate_inv(r);
+        ctx->cap_rate = (uint64_t) 1 << 20;      /* C'/32: a 256 Mb/s path */
+        ctx->ai_rate  = 2 * ctx->cap_rate;
+        ctx->tx_cav   = true;
+        /* The code the path feeds back, as mb_ecn_ece sets it: the gate
+           arms on the raw code, not on its EWMA. */
+        ctx->tx_cap   = cap_enc((uint64_t) 1 << (20 + CA_CAP_SHFT));
+
+        return ctx;
+}
+
+/*
+ * The gate: a mark one step under the reference lets the increase
+ * run; the reference itself holds it and only the decrease acts. With
+ * the slope at its compile-time floor the gate does not engage.
+ */
+static int test_mb_ecn_gate_at_ref(void)
+{
+        struct mb_ecn_ctx * ctx;
+        uint64_t            r0 = (uint64_t) 1 << 20;
+
+        TEST_START();
+
+        ctx = hold_ctx(r0);
+        if (ctx == NULL) {
+                printf("Failed to create context.\n");
+                goto fail;
+        }
+
+        /* Under the gate: the increase outruns a 1% cut over 10 ms. */
+        ctx->tx_ecp = CA_ECE_REF - 1;   /* no lead: the mark is standing */
+
+        mb_ecn_ece(ctx, CA_ECE_REF - 1, 0, 10 * MS);
+
+        if (ctx->ai_hold) {
+                printf("held one step under the gate.\n");
+                goto fail_ctx;
+        }
+
+        if (ctx->rate <= r0) {
+                printf("no increase under the gate: %" PRIu64 ".\n",
+                       ctx->rate);
+                goto fail_ctx;
+        }
+
+        /* At the gate: held, and the rate only sheds. */
+        ctx->rate = r0;
+
+        mb_ecn_ece(ctx, CA_ECE_REF, 0, 20 * MS);
+
+        if (!ctx->ai_hold) {
+                printf("the reference mark did not hold.\n");
+                goto fail_ctx;
+        }
+
+        if (ctx->rate >= r0) {
+                printf("held, yet the rate rose: %" PRIu64 ".\n", ctx->rate);
+                goto fail_ctx;
+        }
+
+        if (ctx->n_hold != 1) {
+                printf("hold count %" PRIu64 ".\n", ctx->n_hold);
+                goto fail_ctx;
+        }
+
+        /* Unscaled slope: the same mark does not gate. The code goes
+           with it -- the gate reads the code the path fed back, and a
+           path at the compile-time floor feeds back a floor code. */
+        ctx->ai_hold  = false;
+        ctx->cap_rate = CA_RATE_MIN;
+        ctx->ai_rate  = 2 * CA_RATE_MIN;
+        ctx->tx_cap   = 0;
+
+        mb_ecn_ece(ctx, CA_ECE_REF, 0, 30 * MS);
+
+        if (ctx->ai_hold) {
+                printf("gated with the slope at its floor.\n");
+                goto fail_ctx;
+        }
+
+        mb_ecn_ctx_destroy(ctx);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_ctx:
+        mb_ecn_ctx_destroy(ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/*
+ * Held under a saturated mark the rate sheds through cap_rate down
+ * to CA_RATE_MIN; released by feedback below the gate it climbs
+ * again. This is the floor the gate had to remove: n held controllers
+ * at C'/32 are n / 32 of the link whatever the mark says.
+ */
+static int test_mb_ecn_hold_sheds_to_floor(void)
+{
+        struct mb_ecn_ctx * ctx;
+        uint64_t            r0 = (uint64_t) 2 << 20;
+        uint64_t            ftag = 0;
+        uint64_t            t = 0;
+        size_t              i;
+
+        TEST_START();
+
+        ctx = hold_ctx(r0);
+        if (ctx == NULL) {
+                printf("Failed to create context.\n");
+                goto fail;
+        }
+
+        /* Saturated feedback every 100 ms for 3 s, sending throughout. */
+        for (i = 0; i < 30; i++) {
+                mb_ecn_ece(ctx, CA_ECE_MAX, 0, t);
+                t = drive_backlogged(ctx, &ftag, t, 100 * MS, LEN);
+        }
+
+        if (!ctx->ai_hold) {
+                printf("saturated mark did not hold.\n");
+                goto fail_ctx;
+        }
+
+        if (ctx->rate != CA_RATE_MIN) {
+                printf("rate %" PRIu64 " under a saturated mark, cap_rate %"
+                       PRIu64 ".\n", ctx->rate, ctx->cap_rate);
+                goto fail_ctx;
+        }
+
+        /* Released below the gate the increase resumes at once. */
+        mb_ecn_ece(ctx, CA_ECE_REF / 4, 0, t);
+        t = drive_backlogged(ctx, &ftag, t, 100 * MS, LEN);
+
+        if (ctx->ai_hold) {
+                printf("feedback below the gate did not release.\n");
+                goto fail_ctx;
+        }
+
+        if (ctx->rate <= CA_RATE_MIN) {
+                printf("no increase after release: %" PRIu64 ".\n",
+                       ctx->rate);
+                goto fail_ctx;
+        }
+
+        mb_ecn_ctx_destroy(ctx);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_ctx:
+        mb_ecn_ctx_destroy(ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/*
+ * Feedback going stale on a flow still sending holds the increase
+ * with the mark it clears, so the rate stands: neither the increase
+ * (the mark is gone) nor the decrease (so is the mark). Liveness
+ * through the loss horizon then releases it, a path that delivers
+ * and reports nothing being clear; the loss cut halves it instead
+ * when nothing at all comes back, and stays held.
+ */
+static int test_mb_ecn_stale_hold(void)
+{
+        struct mb_ecn_ctx * ctx;
+        uint64_t            r0 = (uint64_t) 1 << 20;
+        uint64_t            ftag = 0;
+        uint64_t            ttl;
+        uint64_t            r1;
+        uint64_t            t;
+        size_t              i;
+
+        TEST_START();
+
+        ctx = hold_ctx(r0);
+        if (ctx == NULL) {
+                printf("Failed to create context.\n");
+                goto fail;
+        }
+
+        /* One mark below the gate, then silence while sending. */
+        mb_ecn_ece(ctx, CA_ECE_REF / 2, 0, MS);
+        ttl = ctx->ece_ttl;
+        t   = drive_backlogged(ctx, &ftag, MS, ttl + 10 * MS, LEN);
+
+        if (ctx->tx_ece != 0) {
+                printf("mark did not age out.\n");
+                goto fail_ctx;
+        }
+
+        if (!ctx->ai_hold) {
+                printf("stale feedback did not hold a sending flow.\n");
+                goto fail_ctx;
+        }
+
+        /* Frozen: no term acts on a held flow with no mark. */
+        r1 = ctx->rate;
+        t  = drive_backlogged(ctx, &ftag, t, 200 * MS, LEN);
+
+        if (ctx->rate != r1) {
+                printf("held rate moved %" PRIu64 " -> %" PRIu64 ".\n",
+                       r1, ctx->rate);
+                goto fail_ctx;
+        }
+
+        /* Pongs keep coming: released once the loss horizon passes. */
+        for (i = 0; i < 6 && ctx->ai_hold; i++) {
+                mb_ecn_ctx_rtt(ctx, t, 2 * MS);
+                t = drive_backlogged(ctx, &ftag, t, ttl, LEN);
+        }
+
+        if (ctx->ai_hold) {
+                printf("live silence never released the hold.\n");
+                goto fail_ctx;
+        }
+
+        if (ctx->n_loss != 0) {
+                printf("liveness intact yet %" PRIu64 " loss cuts.\n",
+                       ctx->n_loss);
+                goto fail_ctx;
+        }
+
+        if (ctx->rate <= r1) {
+                printf("no increase after release: %" PRIu64 ".\n",
+                       ctx->rate);
+                goto fail_ctx;
+        }
+
+        mb_ecn_ctx_destroy(ctx);
+
+        /* Silence without liveness: the cut, and the hold stays. */
+        ctx = hold_ctx(r0);
+        if (ctx == NULL) {
+                printf("Failed to create context.\n");
+                goto fail;
+        }
+
+        ftag = 0;
+
+        mb_ecn_ece(ctx, CA_ECE_REF / 2, 0, MS);
+        ttl = ctx->ece_ttl;
+        t   = drive_backlogged(ctx, &ftag, MS, CA_HB_LOSS * ttl - 5 * MS,
+                               LEN);
+
+        if (ctx->n_loss != 0 || !ctx->ai_hold) {
+                printf("cut early, or not held: %" PRIu64 " cuts.\n",
+                       ctx->n_loss);
+                goto fail_ctx;
+        }
+
+        r1 = ctx->rate;
+        t  = drive_backlogged(ctx, &ftag, t, 15 * MS, LEN);
+
+        if (ctx->n_loss != 1) {
+                printf("dead silence: %" PRIu64 " loss cuts.\n", ctx->n_loss);
+                goto fail_ctx;
+        }
+
+        if (!ctx->ai_hold) {
+                printf("dead silence released the hold.\n");
+                goto fail_ctx;
+        }
+
+        if (ctx->rate > r1 / 2 + r1 / 100) {
+                printf("loss cut left the rate at %" PRIu64 " of %" PRIu64
+                       ".\n", ctx->rate, r1);
+                goto fail_ctx;
+        }
+
+        if (ctx->last_sig != MS) {
+                printf("the cut touched the signal clock.\n");
+                goto fail_ctx;
+        }
+
+        mb_ecn_ctx_destroy(ctx);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_ctx:
+        mb_ecn_ctx_destroy(ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/* An idle flow's mark ages out without a hold: silence there is idle. */
+static int test_mb_ecn_stale_idle_no_hold(void)
+{
+        struct mb_ecn_ctx * ctx;
+        uint64_t            ftag = 0;
+
+        TEST_START();
+
+        ctx = hold_ctx((uint64_t) 1 << 20);
+        if (ctx == NULL) {
+                printf("Failed to create context.\n");
+                goto fail;
+        }
+
+        mb_ecn_snd(ctx, LEN, MS, &ftag);
+        mb_ecn_ece(ctx, CA_ECE_REF / 2, 0, 2 * MS);
+
+        /* One send after a gap past the idle threshold and the TTL. */
+        mb_ecn_snd(ctx, LEN, 2 * MS + ctx->ece_ttl + MS, &ftag);
+
+        if (ctx->backlogged) {
+                printf("idle gap read as backlogged.\n");
+                goto fail_ctx;
+        }
+
+        if (ctx->tx_ece != 0) {
+                printf("mark did not age out.\n");
+                goto fail_ctx;
+        }
+
+        if (ctx->ai_hold) {
+                printf("an idle flow was held.\n");
+                goto fail_ctx;
+        }
+
+        mb_ecn_ctx_destroy(ctx);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_ctx:
+        mb_ecn_ctx_destroy(ctx);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/*
+ * The loss horizon follows the heartbeat: on a quiet path only pongs
+ * carry liveness, one per heartbeat interval plus an RTT. A backlogged
+ * flow on an uncongested 0.8 s RTT path (pongs every 1.6 s) is not
+ * cut; the same cadence on a path declared fast is, as the feedback
+ * horizon alone (1.07 s) says it should be.
+ */
+static int test_mb_ecn_loss_horizon_tracks_rtt(void)
+{
+        struct mb_ecn_ctx * ctx;
+        uint64_t            r0 = (uint64_t) 1 << 20;
+        uint64_t            ftag = 0;
+        uint64_t            t;
+        size_t              i;
+
+        TEST_START();
+
+        ctx = hold_ctx(r0);
+        if (ctx == NULL) {
+                printf("Failed to create context.\n");
+                goto fail;
+        }
+
+        ctx->ss_tc = 1600 * MS;               /* tracking an 0.8 s RTT */
+
+        mb_ecn_ece(ctx, 0, 0, MS);            /* the path has reported */
+        t = MS;
+
+        for (i = 0; i < 8; i++) {
+                t = drive_backlogged(ctx, &ftag, t, 1600 * MS, LEN);
+                mb_ecn_ctx_rtt(ctx, t, 800 * MS);
+        }
+
+        if (ctx->n_loss != 0) {
+                printf("%" PRIu64 " loss cuts on a quiet long path.\n",
+                       ctx->n_loss);
+                goto fail_ctx;
+        }
+
+        if (ctx->ai_hold) {
+                printf("held on a quiet long path.\n");
+                goto fail_ctx;
+        }
+
+        if (ctx->rate <= r0) {
+                printf("no increase on a quiet long path: %" PRIu64 ".\n",
+                       ctx->rate);
+                goto fail_ctx;
+        }
+
+        mb_ecn_ctx_destroy(ctx);
+
+        /* Declared fast, the same silence is collapse. */
+        ctx = hold_ctx(r0);
+        if (ctx == NULL) {
+                printf("Failed to create context.\n");
+                goto fail;
+        }
+
+        ftag = 0;
+
+        mb_ecn_ece(ctx, 0, 0, MS);
+        t = drive_backlogged(ctx, &ftag, MS, 1600 * MS, LEN);
+
+        if (ctx->n_loss == 0) {
+                printf("no cut on a fast path silent for 1.6 s.\n");
                 goto fail_ctx;
         }
 
@@ -3137,7 +4038,7 @@ int mb_ecn_test(int     argc,
         ret |= test_mb_ecn_ece_cap_clamps();
         ret |= test_mb_ecn_cap_ttl_reverts();
         ret |= test_mb_ecn_ctrl_per_ctx_ai();
-        ret |= test_mb_ecn_ctrl_per_ctx_floor();
+        ret |= test_mb_ecn_ctrl_no_capacity_floor();
         ret |= test_mb_ecn_snd_slow_rate_paced();
         ret |= test_mb_ecn_snd_idle_burst_bound();
         ret |= test_mb_ecn_snd_wait_no_overflow();
@@ -3148,9 +4049,19 @@ int mb_ecn_test(int     argc,
         ret |= test_mb_ecn_first_send_warmup();
         ret |= test_mb_ecn_two_flow_converge();
         ret |= test_mb_ecn_ramp_overshoot_grows_with_rtt();
-        ret |= test_mb_ecn_shared_ctx_offered_per_flow();
+        ret |= test_mb_ecn_shared_ctx_offered_aggregate();
         ret |= test_mb_ecn_flow_count_restarts_window();
         ret |= test_mb_ecn_ceiling_clears_backlog();
+        ret |= test_mb_ecn_sfq_share_rate();
+        ret |= test_mb_ecn_sfq_share_bytes();
+        ret |= test_mb_ecn_sfq_leave();
+        ret |= test_mb_ecn_flow_join_widens_round();
+        ret |= test_mb_ecn_fifo_burst_not_backlogged();
+        ret |= test_mb_ecn_gate_at_ref();
+        ret |= test_mb_ecn_hold_sheds_to_floor();
+        ret |= test_mb_ecn_stale_hold();
+        ret |= test_mb_ecn_stale_idle_no_hold();
+        ret |= test_mb_ecn_loss_horizon_tracks_rtt();
 
         return ret;
 }
