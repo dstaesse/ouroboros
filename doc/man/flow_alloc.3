@@ -19,8 +19,8 @@ const struct timespec * \fItimeo\fB);
 int flow_alloc(const char * \fIdst_name\fB, qosspec_t * \fIqs\fB,
 const struct timespec * \fItimeo\fB);
 
-int flow_join(const char * \fIdst_name\fB, qosspec_t * \fIqs\fB, const
-struct timespec * \fItimeo\fB);
+int flow_join(const char * \fIdst_name\fB, const struct timespec *
+\fItimeo\fB);
 
 \fBint flow_dealloc(int \fIfd\fB);\fR
 
