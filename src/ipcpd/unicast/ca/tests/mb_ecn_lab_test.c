@@ -86,7 +86,8 @@ static struct mb_ecn_ctx * mk_ctx(void)
  * ------------------------------------------------------------------
  */
 
-#define LAB_MAXF   64                 /* most flows on one link     */
+#define LAB_MAXF   256                /* most flows on one link     */
+#define LAB_MSKF   64                 /* flows a flow mask reaches  */
 #define LAB_N8     8                  /* flows in the n8 fixpoints  */
 #define LAB_FIFO   16384              /* bottleneck ring, packets   */
 #define LAB_FBQ    64                 /* pending feedback ring      */
@@ -96,7 +97,7 @@ static struct mb_ecn_ctx * mk_ctx(void)
 struct lab_pkt {
         uint64_t dep;                 /* departure time (ns)        */
         uint8_t  ecn;
-        uint8_t  f;                   /* flow index                 */
+        uint16_t f;                   /* flow index                 */
 };
 
 struct lab_fb {
@@ -203,7 +204,7 @@ static bool lab_up(const struct lab_cfg * c,
         if (c->t1[i] > 0 && t >= c->t1[i])
                 return false;
 
-        if (c->ch_p == 0 || ((c->ch_f >> i) & 1) == 0)
+        if (c->ch_p == 0 || i >= LAB_MSKF || ((c->ch_f >> i) & 1) == 0)
                 return true;
 
         return t % c->ch_p < c->ch_p / 2;
@@ -410,7 +411,7 @@ static bool lab_send(struct lab_link * l,
                 l->t_srv = dep;
                 l->pk[(l->h + l->n) % LAB_FIFO].dep = dep;
                 l->pk[(l->h + l->n) % LAB_FIFO].ecn = ecn;
-                l->pk[(l->h + l->n) % LAB_FIFO].f   = (uint8_t) fi;
+                l->pk[(l->h + l->n) % LAB_FIFO].f   = (uint16_t) fi;
                 l->n++;
                 l->q += lab_len;
         }
@@ -464,6 +465,25 @@ static void lab_fb_apply(struct lab_flow * f,
         f->last = t;
         f->fb_h = (f->fb_h + 1) % LAB_FBQ;
         f->fb_n--;
+}
+
+/*
+ * Sender stall at st_t (dsched untrack/starve model): the queue
+ * drains for st_d and the resume bursts the backlog through the
+ * marker. Returns the next stall, jittered so it cannot phase-lock.
+ */
+static uint64_t lab_stall(const struct lab_cfg * c,
+                          uint64_t               st_t)
+{
+        uint64_t end = st_t + c->st_d;
+        uint64_t msk = c->st_f == 0 ? 3 : c->st_f;
+        size_t   i;
+
+        for (i = 0; i < c->n && i < LAB_MSKF; i++)
+                if (((msk >> i) & 1) && lab_fl[i].t_snd < end)
+                        lab_fl[i].t_snd = end;
+
+        return st_t + c->st_p + (st_t / c->st_p % 3) * c->st_p / 5;
 }
 
 static void lab_run(const struct lab_cfg * c)
@@ -534,22 +554,8 @@ static void lab_run(const struct lab_cfg * c)
                 uint64_t nxt = LAB_NONE;
                 int      ev  = -1;      /* flow * 4 + kind */
 
-                /*
-                 * Sender-side service stall: the scheduler feeding
-                 * the transmit queue pauses for st_d, the queue
-                 * drains clean, and the resume bursts the backlog
-                 * through the marker (dsched untrack/starve model).
-                 * Jitter the period so it cannot phase-lock.
-                 */
-                if (st_t != LAB_NONE && smp >= st_t) {
-                        uint64_t end = st_t + c->st_d;
-                        uint64_t msk = c->st_f == 0 ? 3 : c->st_f;
-
-                        for (i = 0; i < c->n; i++)
-                                if (((msk >> i) & 1) && lab_fl[i].t_snd < end)
-                                        lab_fl[i].t_snd = end;
-                        st_t += c->st_p + (st_t / c->st_p % 3) * c->st_p / 5;
-                }
+                if (st_t != LAB_NONE && smp >= st_t)
+                        st_t = lab_stall(c, st_t);
 
                 for (i = 0; i < c->n; i++) {
                         struct lab_flow * f = &lab_fl[i];
@@ -1574,6 +1580,119 @@ static int test_mb_ecn_lab_long_rtt(uint64_t cap,
         return TEST_RC_FAIL;
 }
 
+/* Largest light demand over the smallest. */
+#define LAB_SKEW_SPREAD 32.0
+
+/* Weight of light controller i of nl: geometric across the spread. */
+static double lab_skew_w(size_t i,
+                         size_t nl)
+{
+        if (nl < 2)
+                return 1.0;
+
+        return pow(LAB_SKEW_SPREAD, (double) i / (double) (nl - 1));
+}
+
+/* Link share the light controllers offer together. */
+#define LAB_SKEW_LOAD 0.5
+
+/*
+ * An exchange port: ng greedy controllers, then nl app-limited ones
+ * whose demands spread geometrically and add up to LAB_SKEW_LOAD.
+ */
+static void lab_cfg_skew(struct lab_cfg * c,
+                         uint64_t         cap,
+                         size_t           ng,
+                         size_t           nl)
+{
+        double load = LAB_SKEW_LOAD * (double) cap;
+        double w    = 0.0;
+        size_t i;
+
+        lab_cfg_gate(c, "gate-skew", cap, ng + nl, lab_ring(cap, LEN));
+
+        for (i = 0; i < nl; i++)
+                w += lab_skew_w(i, nl);
+
+        for (i = 0; i < nl; i++)
+                c->ia[ng + i] = (uint64_t) ((double) c->len * BILLION * w
+                                            / (load * lab_skew_w(i, nl)));
+}
+
+/* Share of its offered load the light class has to get through. */
+#define LAB_SKEW_LIGHT 0.95
+
+/*
+ * Hundreds of controllers, few of them backlogged: the light ones get
+ * what they offer and the greedy ones split what is left evenly.
+ */
+static int test_mb_ecn_lab_gate_skew(uint64_t cap,
+                                     size_t   ng,
+                                     size_t   nl)
+{
+        static struct lab_cfg c;
+        struct lab_sum        s;
+        uint64_t              kb  = cap * 8 / 1000;
+        uint64_t              off = 0;
+        uint64_t              dlv = 0;
+        uint64_t              span;
+        double                jain;
+        size_t                i;
+
+        TEST_START("(%" PRIu64 " kb/s, %zu + %zu flows)", kb, ng, nl);
+
+        lab_cfg_skew(&c, cap, ng, nl);
+
+        lab_run(&c);
+
+        lab_summary(&c, &s);
+
+        span = c.sc_hi - c.sc_lo;
+
+        for (i = ng; i < ng + nl; i++) {
+                off += span / c.ia[i] * c.len;
+                dlv += lab_fl[i].dlv2;
+        }
+
+        jain = lab_jain(0, ng);
+
+        printf("  light %.3f of offered, greedy jain %.4f\n",
+               (double) dlv / (double) off, jain);
+
+        if (s.starved > 0) {
+                printf("starved %zu flows.\n", s.starved);
+                goto fail;
+        }
+
+        if (lab_lnk.e_eps == 0) {
+                printf("never drained the queue.\n");
+                goto fail;
+        }
+
+        if (s.util < LAB_GATE_UTIL) {
+                printf("carried %.2f of the link.\n", s.util);
+                goto fail;
+        }
+
+        if ((double) dlv < LAB_SKEW_LIGHT * (double) off) {
+                printf("light class got %.3f of its offered load.\n",
+                       (double) dlv / (double) off);
+                goto fail;
+        }
+
+        if (jain < LAB_GATE_JN) {
+                printf("fairness %.4f across %zu greedy flows.\n", jain, ng);
+                goto fail;
+        }
+
+        TEST_SUCCESS("(%" PRIu64 " kb/s, %zu + %zu flows)", kb, ng, nl);
+
+        return TEST_RC_SUCCESS;
+ fail:
+        TEST_FAIL("(%" PRIu64 " kb/s, %zu + %zu flows)", kb, ng, nl);
+        return TEST_RC_FAIL;
+}
+
 static int test_mb_ecn_lab(void)
 {
         static const uint64_t gc_cap[] = { 625000, 1250000, 12500000 };
@@ -1736,6 +1855,7 @@ int mb_ecn_lab_test(int     argc,
         ret |= test_mb_ecn_lab_gate_converge(12500000, 32, 32.0);
         ret |= test_mb_ecn_lab_long_rtt(1250000, 300 * MS);
         ret |= test_mb_ecn_lab_long_rtt(1250000, 400 * MS);
+        ret |= test_mb_ecn_lab_gate_skew(12500000, 16, 240);
         ret |= test_mb_ecn_lab_fixpoint_all();
         ret |= test_mb_ecn_lab_fixpoint_n8_all();
         ret |= test_mb_ecn_lab();
