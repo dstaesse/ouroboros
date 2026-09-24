@@ -154,7 +154,7 @@ int do_bootstrap_ipcp(int     argc,
         char *                  ipcp_type      = NULL;
         enum ipcp_type          type           = IPCP_INVALID;
         char *                  layer          = NULL;
-        struct ipcp_list_info * ipcps;
+        struct ipcp_list_info * ipcps          = NULL;
         ssize_t                 len            = 0;
         int                     i              = 0;
         bool                    autobind       = false;
