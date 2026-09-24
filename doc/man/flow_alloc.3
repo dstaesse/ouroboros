@@ -1,4 +1,4 @@
-.\" Ouroboros man pages CC-BY 2017 - 2024
+.\" Ouroboros man pages CC-BY 2017 - 2026
 .\" Dimitri Staessens <dimitri@ouroboros.rocks>
 .\" Sander Vrijders <sander@ouroboros.rocks>
 
@@ -44,16 +44,19 @@ see \fBirm\fR(8).
 The \fBflow_alloc\fR() function requests to allocate system and/or
 network resources to support Inter-Process Communication between the
 calling application and one or more processes accepting flows for
-\fBchar * \fIdst_name\fR, which cannot be NULL.  The
+\fBchar * \fIdst_name\fR, which cannot be NULL. The
 \fBflow_alloc\fR() call can specify a certain minimum \fBqosspec_t *
 \fIqs\fR that has to be guaranteed by the IPC facility allocating the
 resources. This can be NULL if there is no QoS to be guaranteed (best
 effort service). If \fIqs\fR is not NULL, the value of \fIqs\fR will
 be updated to reflect the actual QoS provided by the IPC facility.
 
-The \fBflow_accept\fR() and \fBflow_alloc\fR() take a \fBconst struct
-timespec * \fItimeo\fR to specify a timeout. If \fItimeo\fR is NULL,
-the call will block indefinitely or until some error condition occurs.
+The \fBflow_accept\fR(), \fBflow_alloc\fR() and \fBflow_join\fR()
+functions take a \fBconst struct timespec * \fItimeo\fR to specify a
+timeout. If \fItimeo\fR is NULL, \fBflow_accept\fR() blocks until a
+flow arrives or some error condition occurs, while \fBflow_alloc\fR()
+and \fBflow_join\fR() give up after the IRMd's maximum allocation time
+(20 s by default) and return -EPERM.
 
 The \fBflow_join\fR() function allows applications to join a broadcast
 flow provided by a broadcast layer. The dst is the layer name.
@@ -147,6 +150,12 @@ Flow allocation timed out.
 
 .B -ECRYPT
 The requested encryption is not supported.
+
+\fBflow_alloc\fR() and \fBflow_join\fR() can also return
+
+.B -EPERM
+The allocation was not permitted, or no timeout was given and the
+IRMd's maximum allocation time expired.
 
 .SH ATTRIBUTES
 
