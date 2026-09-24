@@ -137,7 +137,7 @@ autobind=true           # Defaults to false.
 # hash="SHA3_224"       # Defaults to SHA3_256.
 # dht_alpha=3           # DHT parallel search factor (Default 3, optimal)
 # dht_k=8               # DHT replication factor (Default: 8, same as Mainline DHT)
-# dht_t_expiry=3600     # DHT entry expiry time (s) (Default: 86400 s)
+# dht_t_expire=3600     # DHT entry expiry time (s) (Default: 86400 s)
 # dht_t_refresh=900     # DHT contact refresh interval (s) (Default: 900 s)
 # dht_t_replicate=900   # DHT replication interval (s) (Default: 900 s)
    # NAMES KNOWN
