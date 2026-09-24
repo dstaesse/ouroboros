@@ -208,7 +208,7 @@ static int name_check(const uint8_t * dst)
 
         str_hash(HASH_SHA3_256, buf, layer);
 
-        if (memcmp(buf, dst, len) < 0) {
+        if (memcmp(buf, dst, len) != 0) {
                 log_err("Hash mismatch for layer %s.", layer);
                 err = -ENAME;
                 goto fail_layer;
