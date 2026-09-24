@@ -828,7 +828,7 @@ int dt_write_packet(uint64_t             dst_addr,
                         ADDR_VAL32(&dst_addr));
 #ifdef IPCP_FLOW_STATS
                 if (eid < PROC_RES_FDS)
-                        dt_stat_inc(eid, lcl_r, qc, len);
+                        dt_stat_inc(eid, f_nhp, qc, len);
 #endif
                 return -EPERM;
         }
