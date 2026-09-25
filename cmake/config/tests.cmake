@@ -21,3 +21,9 @@ set(MB_ECN_LAB_FULL FALSE CACHE BOOL
 if(MB_ECN_LAB_FULL)
   message(STATUS "Full mb-ecn lab rate sweep enabled")
 endif()
+
+set(CMAKE_CA_LAB_TESTS FALSE CACHE BOOL
+  "Register the CA lab simulations (mb-ecn) as ctest targets")
+if(CMAKE_CA_LAB_TESTS)
+  message(STATUS "CA lab simulation tests registered in ctest")
+endif()

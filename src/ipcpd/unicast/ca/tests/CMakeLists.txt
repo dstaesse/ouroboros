@@ -75,5 +75,7 @@ endif()
 
 add_dependencies(build_tests ${PARENT_DIR}_lab_test)
 
-ouroboros_register_tests(TARGET ${PARENT_DIR}_lab_test
-                         TESTS ${${PARENT_DIR}_lab_tests})
+if(CMAKE_CA_LAB_TESTS)
+  ouroboros_register_tests(TARGET ${PARENT_DIR}_lab_test
+                           TESTS ${${PARENT_DIR}_lab_tests})
+endif()
