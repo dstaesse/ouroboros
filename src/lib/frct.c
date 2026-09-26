@@ -1644,6 +1644,7 @@ static void frcti_sack_snd(struct frcti *           frcti,
         frct_tx(frcti, spb, false);
 }
 
+/* Lossy flows don't ACK: the sender advances its own window. */
 static void ack_snd(struct frcti * frcti,
                     bool           with_sack)
 {
@@ -1657,6 +1658,9 @@ static void ack_snd(struct frcti * frcti,
         bool                 sacking = false;
 
         assert(frcti);
+
+        if (!(frcti->rcv_cr.cflags & FRCTFRTX))
+                return;
 
         STAT_BUMP(frcti, ack_fire);
 
@@ -1753,6 +1757,9 @@ static int ack_arm(struct frcti * frcti)
 {
         struct timespec now;
         uint64_t        deadline;
+
+        if (!(frcti->rcv_cr.cflags & FRCTFRTX))
+                return 0;
 
         if (__atomic_test_and_set(&frcti->ack_pending, __ATOMIC_RELAXED))
                 return 0;
@@ -4505,7 +4512,8 @@ static void frcti_rcv(struct frcti *       frcti,
                 /* If alloc fails, sack_check sees NULL and we skip SACK. */
         }
 
-        send_sack = sa != NULL && sack_check(frcti, seqno, now_ns, sa);
+        send_sack = sa != NULL && sack_check(frcti, seqno, now_ns, sa)
+                && (rcv_cr->cflags & FRCTFRTX);
         in_order  = !after(seqno, rcv_cr->lwe);
 
         pthread_rwlock_unlock(&frcti->lock);
