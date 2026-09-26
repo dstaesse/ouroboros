@@ -202,12 +202,6 @@ static int negotiate_cipher(const struct oap_hdr * peer_hdr,
                            md_nid_to_str(scfg->k.nid));
         }
 
-        if (IS_KEX_ALGO_SET(scfg))
-                log_info_id(id, "Negotiated %s + %s.",
-                            scfg->x.str, scfg->c.str);
-        else
-                log_info_id(id, "No key exchange.");
-
         return 0;
 }
 
@@ -386,6 +380,8 @@ int do_server_kex(const struct name_info * info,
                 log_err_id(id, "Client encap without configured KEX.");
                 return -ECRYPT;
         }
+
+        log_info_id(id, "Negotiated %s + %s.", scfg->x.str, scfg->c.str);
 
         /* Dispatch based on algorithm type */
         if (IS_KEM_ALGORITHM(scfg->x.str))
