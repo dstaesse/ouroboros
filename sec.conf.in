@@ -21,6 +21,7 @@
 # kex=<algorithm>      Key exchange/encapsulation algorithm
 # cipher=<cipher>      Symmetric cipher algorithm
 # kdf=<hash>           Key derivation function hash algorithm
+# digest=<hash>        Signature digest for peer authentication
 # kem_mode=<mode>      KEM encapsulation mode (server or client)
 # auth=<policy>        Peer authentication policy (required or optional)
 # encryption=none      Explicitly disable encryption
@@ -73,6 +74,15 @@
 #   sha3-512            SHA3-512
 #   blake2b512          BLAKE2b-512
 #   blake2s256          BLAKE2s-256
+#
+# Signature Digest (digest=):
+# ---------------------------
+#
+# The hash this end signs the authentication exchange with, taken from
+# the same list as kdf= (default sha256). A peer that signs with a
+# classical key must use the same digest or it is rejected.
+# Post-quantum signature keys (ML-DSA, SLH-DSA) have their own digest
+# and ignore this setting.
 #
 # Peer Authentication (auth=):
 # ----------------------------
