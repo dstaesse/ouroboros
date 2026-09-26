@@ -55,6 +55,8 @@ target_include_directories(irmd PRIVATE
 target_link_libraries(irmd PRIVATE ouroboros-common)
 if(HAVE_TOML)
   target_link_libraries(irmd PRIVATE toml::toml)
+  # tomlc17.h has // comments and inline functions
+  set_source_files_properties(configfile.c PROPERTIES COMPILE_OPTIONS -std=c99)
 endif()
 
 ouroboros_target_debug_definitions(irmd)

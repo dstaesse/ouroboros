@@ -46,22 +46,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <toml.h>
+#include <tomlc17.h>
 #include <arpa/inet.h>
 #ifdef __FreeBSD__
 #include <sys/socket.h>
 #endif
 
-#define ERRBUFSZ 200
-#define DATUMSZ  256
+#define DATUMSZ 256
 
-static int toml_hash(toml_table_t *      table,
+static int toml_hash(toml_datum_t        table,
                      struct layer_info * info)
 {
         toml_datum_t hash;
 
-        hash = toml_string_in(table, "hash");
-        if (!hash.ok) {
+        hash = toml_get(table, "hash");
+        if (hash.type != TOML_STRING) {
                 log_dbg("No hash specified, using default.");
                 return 0;
         }
@@ -76,16 +75,13 @@ static int toml_hash(toml_table_t *      table,
                 info->dir_hash_algo = DIR_HASH_SHA3_512;
         } else {
                 log_err("Unknown hash algorithm: %s.", hash.u.s);
-                free(hash.u.s);
                 return -1;
         }
-
-        free(hash.u.s);
 
         return 0;
 }
 
-static int toml_local(toml_table_t *       table,
+static int toml_local(toml_datum_t         table,
                       struct ipcp_config * conf)
 {
         *conf = local_default_conf;
@@ -119,36 +115,30 @@ static int poa_eth_set(struct poa_spec * poa,
         return 0;
 }
 
-static int toml_poa_eth(toml_table_t *    tbl,
+static int toml_poa_eth(toml_datum_t      tbl,
                         struct poa_spec * poa)
 {
         toml_datum_t dev;
         toml_datum_t et;
         uint16_t     ethertype = POA_ETHERTYPE;
-        int          ret = -1;
 
-        dev = toml_string_in(tbl, "dev");
-        if (!dev.ok) {
+        dev = toml_get(tbl, "dev");
+        if (dev.type != TOML_STRING) {
                 log_err("An eth PoA needs a device.");
-                goto fail;
+                return -1;
         }
 
-        et = toml_int_in(tbl, "ethertype");
-        if (et.ok) {
-                if (et.u.i < 0 || et.u.i > 0xFFFF) {
+        et = toml_get(tbl, "ethertype");
+        if (et.type == TOML_INT64) {
+                if (et.u.int64 < 0 || et.u.int64 > 0xFFFF) {
                         log_err("Invalid ethertype.");
-                        goto fail;
+                        return -1;
                 }
 
-                ethertype = et.u.i;
+                ethertype = et.u.int64;
         }
 
-        ret = poa_eth_set(poa, dev.u.s, ethertype);
- fail:
-        if (dev.ok)
-                free(dev.u.s);
-
-        return ret;
+        return poa_eth_set(poa, dev.u.s, ethertype);
 }
 
 /* A PoA is bound locally: only literal addresses are accepted here. */
@@ -181,20 +171,19 @@ static int toml_poa_udp(const char *      str,
 }
 
 /* Attaches every PoA in the "udp" or "eth" array; string or table. */
-static int toml_poa_array(toml_table_t * table,
-                          pid_t          pid,
-                          const char *   key)
+static int toml_poa_array(toml_datum_t table,
+                          pid_t        pid,
+                          const char * key)
 {
         struct poa_spec poa;
-        toml_array_t *  arr;
-        int             n;
+        toml_datum_t    arr;
         int             i;
         bool            is_eth;
 
-        arr = toml_array_in(table, key);
-        if (arr == NULL) {
+        arr = toml_get(table, key);
+        if (arr.type != TOML_ARRAY) {
                 /* A table here would otherwise attach nothing, silently. */
-                if (toml_table_in(table, key) != NULL) {
+                if (arr.type == TOML_TABLE) {
                         log_err("A %s PoA is an array: %s = [...] "
                                 "or [[%s]].", key, key, key);
                         return -1;
@@ -205,42 +194,29 @@ static int toml_poa_array(toml_table_t * table,
 
         is_eth = strcmp(key, "eth") == 0;
 
-        n = toml_array_nelem(arr);
-
-        for (i = 0; i < n; i++) {
-                toml_datum_t s;
+        for (i = 0; i < arr.u.arr.size; i++) {
+                toml_datum_t d = arr.u.arr.elem[i];
+                toml_datum_t addr;
                 int          ret;
 
-                s = toml_string_at(arr, i);
-                if (s.ok) {
+                if (d.type == TOML_STRING) {
                         if (is_eth)
-                                ret = poa_eth_set(&poa, s.u.s,
-                                                  POA_ETHERTYPE);
+                                ret = poa_eth_set(&poa, d.u.s, POA_ETHERTYPE);
                         else
-                                ret = toml_poa_udp(s.u.s, &poa);
-
-                        free(s.u.s);
+                                ret = toml_poa_udp(d.u.s, &poa);
+                } else if (d.type != TOML_TABLE) {
+                        log_err("Invalid %s PoA entry.", key);
+                        return -1;
+                } else if (is_eth) {
+                        ret = toml_poa_eth(d, &poa);
                 } else {
-                        toml_table_t * d = toml_table_at(arr, i);
-
-                        if (d == NULL) {
-                                log_err("Invalid %s PoA entry.", key);
+                        addr = toml_get(d, "addr");
+                        if (addr.type != TOML_STRING) {
+                                log_err("No addr for udp PoA.");
                                 return -1;
                         }
 
-                        if (is_eth) {
-                                ret = toml_poa_eth(d, &poa);
-                        } else {
-                                toml_datum_t addr = toml_string_in(d, "addr");
-
-                                if (!addr.ok) {
-                                        log_err("No addr for udp PoA.");
-                                        return -1;
-                                }
-
-                                ret = toml_poa_udp(addr.u.s, &poa);
-                                free(addr.u.s);
-                        }
+                        ret = toml_poa_udp(addr.u.s, &poa);
                 }
 
                 if (ret < 0)
@@ -253,8 +229,8 @@ static int toml_poa_array(toml_table_t * table,
         return 0;
 }
 
-static int toml_attach(toml_table_t * table,
-                       pid_t          pid)
+static int toml_attach(toml_datum_t table,
+                       pid_t        pid)
 {
         if (toml_poa_array(table, pid, "udp") < 0)
                 return -1;
@@ -262,18 +238,19 @@ static int toml_attach(toml_table_t * table,
         return toml_poa_array(table, pid, "eth");
 }
 
-static int toml_broadcast(toml_table_t *       table,
+static int toml_broadcast(toml_datum_t         table,
                           struct ipcp_config * conf)
 {
         (void) table;
-        (void) conf;
+
+        *conf = bc_default_conf;
 
         return 0;
 }
 
 #define BETWEEN(a, b, c) ((a) >= (b) && (a) <= (c))
 #define DHT(conf, x) (conf)->dht.params.x
-static int toml_dir(toml_table_t *      table,
+static int toml_dir(toml_datum_t        table,
                     struct dir_config * conf)
 {
         toml_datum_t dir;
@@ -283,77 +260,81 @@ static int toml_dir(toml_table_t *      table,
         toml_datum_t t_replicate;
         toml_datum_t k;
 
-        dir = toml_string_in(table, "directory");
-        if (dir.ok) {
+        dir = toml_get(table, "directory");
+        if (dir.type == TOML_STRING) {
                 log_dbg("Found directory type: %s", dir.u.s);
+
                 if (strlen(dir.u.s) > DATUMSZ) {
                         log_err("Directory name too long: %s", dir.u.s);
-                        free(dir.u.s);
                         return -1;
                 }
+
                 if (strcmp(dir.u.s, "DHT") == 0)
                         conf->pol = DIR_DHT;
                 else if (strcmp(dir.u.s, "dht") == 0)
                         conf->pol = DIR_DHT;
                 else {
                         log_err("Unknown directory type: %s", dir.u.s);
-                        free(dir.u.s);
                         return -EINVAL;
                 }
-                free(dir.u.s);
         }
 
         switch(conf->pol) {
         case DIR_DHT:
                 log_info("Using DHT directory policy.");
-                alpha = toml_int_in(table, "dht_alpha");
-                if (alpha.ok) {
-                        if (!BETWEEN(alpha.u.i,
+
+                alpha = toml_get(table, "dht_alpha");
+                if (alpha.type == TOML_INT64) {
+                        if (!BETWEEN(alpha.u.int64,
                                 DHT_ALPHA_MIN, DHT_ALPHA_MAX)) {
                                 log_err("Invalid alpha value: %ld",
-                                        (long) alpha.u.i);
+                                        (long) alpha.u.int64);
                                 return -EINVAL;
                         }
-                        DHT(conf, alpha) = alpha.u.i;
+                        DHT(conf, alpha) = alpha.u.int64;
                 }
-                t_expire = toml_int_in(table, "dht_t_expire");
-                if (t_expire.ok) {
-                        if (!BETWEEN(t_expire.u.i,
+
+                t_expire = toml_get(table, "dht_t_expire");
+                if (t_expire.type == TOML_INT64) {
+                        if (!BETWEEN(t_expire.u.int64,
                                 DHT_T_EXPIRE_MIN, DHT_T_EXPIRE_MAX)) {
                                 log_err("Invalid expire time: %ld",
-                                        (long) t_expire.u.i);
+                                        (long) t_expire.u.int64);
                                 return -EINVAL;
                         }
-                        DHT(conf, t_expire) = t_expire.u.i;
+                        DHT(conf, t_expire) = t_expire.u.int64;
                 }
-                t_refresh = toml_int_in(table, "dht_t_refresh");
-                if (t_refresh.ok) {
-                        if (!BETWEEN(t_refresh.u.i,
+
+                t_refresh = toml_get(table, "dht_t_refresh");
+                if (t_refresh.type == TOML_INT64) {
+                        if (!BETWEEN(t_refresh.u.int64,
                                 DHT_T_REFRESH_MIN, DHT_T_REFRESH_MAX)) {
                                 log_err("Invalid refresh time: %ld",
-                                        (long) t_refresh.u.i);
+                                        (long) t_refresh.u.int64);
                                 return -EINVAL;
                         }
-                        DHT(conf, t_refresh) = t_refresh.u.i;
+                        DHT(conf, t_refresh) = t_refresh.u.int64;
                 }
-                t_replicate = toml_int_in(table, "dht_t_replicate");
-                if (t_replicate.ok) {
-                        if (!BETWEEN(t_replicate.u.i,
+
+                t_replicate = toml_get(table, "dht_t_replicate");
+                if (t_replicate.type == TOML_INT64) {
+                        if (!BETWEEN(t_replicate.u.int64,
                                 DHT_T_REPLICATE_MIN, DHT_T_REPLICATE_MAX)) {
                                 log_err("Invalid replication time: %ld",
-                                        (long) t_replicate.u.i);
+                                        (long) t_replicate.u.int64);
                                 return -EINVAL;
                         }
-                        DHT(conf, t_replicate) = t_replicate.u.i;
+                        DHT(conf, t_replicate) = t_replicate.u.int64;
                 }
-                k = toml_int_in(table, "dht_k");
-                if (k.ok) {
-                        if (!BETWEEN(k.u.i, DHT_K_MIN, DHT_K_MAX)) {
+
+                k = toml_get(table, "dht_k");
+                if (k.type == TOML_INT64) {
+                        if (!BETWEEN(k.u.int64, DHT_K_MIN, DHT_K_MAX)) {
                                 log_err("Invalid replication factor: %ld",
-                                        (long) k.u.i);
+                                        (long) k.u.int64);
                                 return -EINVAL;
                         }
-                        DHT(conf, k) = k.u.i;
+                        DHT(conf, k) = k.u.int64;
                 }
                 break;
         default:
@@ -364,7 +345,7 @@ static int toml_dir(toml_table_t *      table,
         return 0;
 }
 
-static int toml_routing(toml_table_t *     table,
+static int toml_routing(toml_datum_t       table,
                         struct dt_config * conf)
 {
         toml_datum_t routing;
@@ -372,8 +353,8 @@ static int toml_routing(toml_table_t *     table,
         toml_datum_t t_update;
         toml_datum_t t_timeo;
 
-        routing = toml_string_in(table, "routing");
-        if (routing.ok) {
+        routing = toml_get(table, "routing");
+        if (routing.type == TOML_STRING) {
                 if (strcmp(routing.u.s, "link-state") == 0) {
                         conf->routing.pol = ROUTING_LINK_STATE;
                         conf->routing.ls.pol = LS_SIMPLE;
@@ -387,38 +368,40 @@ static int toml_routing(toml_table_t *     table,
                         conf->routing.pol = ROUTING_INVALID;
                         return -EINVAL;
                 }
-                free(routing.u.s);
         }
 
         switch (conf->routing.pol) {
         case ROUTING_LINK_STATE:
                 log_info("Using Link State routing policy.");
-                t_recalc = toml_int_in(table, "ls_t_recalc");
-                if (t_recalc.ok) {
-                        if (t_recalc.u.i < 1) {
+
+                t_recalc = toml_get(table, "ls_t_recalc");
+                if (t_recalc.type == TOML_INT64) {
+                        if (t_recalc.u.int64 < 1) {
                                 log_err("Invalid ls_t_recalc value: %ld",
-                                        (long) t_recalc.u.i);
+                                        (long) t_recalc.u.int64);
                                 return -EINVAL;
                         }
-                        conf->routing.ls.t_recalc = t_recalc.u.i;
+                        conf->routing.ls.t_recalc = t_recalc.u.int64;
                 }
-                t_update = toml_int_in(table, "ls_t_update");
-                if (t_update.ok) {
-                        if (t_update.u.i < 1) {
+
+                t_update = toml_get(table, "ls_t_update");
+                if (t_update.type == TOML_INT64) {
+                        if (t_update.u.int64 < 1) {
                                 log_err("Invalid ls_t_update value: %ld",
-                                        (long) t_update.u.i);
+                                        (long) t_update.u.int64);
                                 return -EINVAL;
                         }
-                        conf->routing.ls.t_update = t_update.u.i;
+                        conf->routing.ls.t_update = t_update.u.int64;
                 }
-                t_timeo = toml_int_in(table, "ls_t_timeo");
-                if (t_timeo.ok) {
-                        if (t_timeo.u.i < 1) {
+
+                t_timeo = toml_get(table, "ls_t_timeo");
+                if (t_timeo.type == TOML_INT64) {
+                        if (t_timeo.u.int64 < 1) {
                                 log_err("Invalid ls_t_timeo value: %ld",
-                                        (long) t_timeo.u.i);
+                                        (long) t_timeo.u.int64);
                                 return -EINVAL;
                         }
-                        conf->routing.ls.t_timeo = t_timeo.u.i;
+                        conf->routing.ls.t_timeo = t_timeo.u.int64;
                 }
                 break;
         default:
@@ -429,18 +412,17 @@ static int toml_routing(toml_table_t *     table,
         return 0;
 }
 
-static int toml_addr_auth(toml_table_t *      table,
+static int toml_addr_auth(toml_datum_t        table,
                           struct uni_config * conf)
 {
         toml_datum_t addr_auth;
 
-        addr_auth = toml_string_in(table, "addr-auth");
-        if (addr_auth.ok) {
+        addr_auth = toml_get(table, "addr-auth");
+        if (addr_auth.type == TOML_STRING) {
                 if (strcmp(addr_auth.u.s, "flat") == 0)
                         conf->addr_auth_type = ADDR_AUTH_FLAT_RANDOM;
                 else
                         conf->addr_auth_type = ADDR_AUTH_INVALID;
-                free(addr_auth.u.s);
         }
 
         if (conf->addr_auth_type == ADDR_AUTH_INVALID)
@@ -449,21 +431,19 @@ static int toml_addr_auth(toml_table_t *      table,
         return 0;
 }
 
-static int toml_congestion(toml_table_t *      table,
+static int toml_congestion(toml_datum_t        table,
                            struct uni_config * conf)
 {
         toml_datum_t congestion;
 
-        congestion = toml_string_in(table, "congestion");
-        if (congestion.ok) {
+        congestion = toml_get(table, "congestion");
+        if (congestion.type == TOML_STRING) {
                 if (strcmp(congestion.u.s, "none") == 0)
                         conf->cong_avoid = CA_NONE;
                 else if (strcmp(congestion.u.s, "mb-ecn") == 0)
                         conf->cong_avoid = CA_MB_ECN;
                 else
                         conf->cong_avoid = CA_INVALID;
-                free(congestion.u.s);
-
         }
 
         if (conf->cong_avoid == CA_INVALID)
@@ -472,7 +452,7 @@ static int toml_congestion(toml_table_t *      table,
         return 0;
 }
 
-static int toml_dt(toml_table_t *     table,
+static int toml_dt(toml_datum_t       table,
                    struct dt_config * conf)
 {
         toml_datum_t addr;
@@ -480,21 +460,21 @@ static int toml_dt(toml_table_t *     table,
         toml_datum_t ttl;
         toml_datum_t max_rtt;
 
-        addr = toml_int_in(table, "addr_size");
-        if (addr.ok)
-                conf->addr_size = addr.u.i;
+        addr = toml_get(table, "addr_size");
+        if (addr.type == TOML_INT64)
+                conf->addr_size = addr.u.int64;
 
-        eid = toml_int_in(table, "eid_size");
-        if (eid.ok)
-                conf->eid_size = eid.u.i;
+        eid = toml_get(table, "eid_size");
+        if (eid.type == TOML_INT64)
+                conf->eid_size = eid.u.int64;
 
-        ttl = toml_int_in(table, "max_ttl");
-        if (ttl.ok)
-                conf->max_ttl = ttl.u.i;
+        ttl = toml_get(table, "max_ttl");
+        if (ttl.type == TOML_INT64)
+                conf->max_ttl = ttl.u.int64;
 
-        max_rtt = toml_int_in(table, "max_rtt");
-        if (max_rtt.ok)
-                conf->max_rtt = max_rtt.u.i;
+        max_rtt = toml_get(table, "max_rtt");
+        if (max_rtt.type == TOML_INT64)
+                conf->max_rtt = max_rtt.u.int64;
 
         if (toml_routing(table, conf) < 0) {
                 log_err("Invalid routing option.");
@@ -504,10 +484,12 @@ static int toml_dt(toml_table_t *     table,
         return 0;
 }
 
-static int toml_unicast(toml_table_t *       table,
+static int toml_unicast(toml_datum_t         table,
                         struct ipcp_config * conf)
 {
         *conf = uni_default_conf;
+        if (toml_hash(table, &conf->layer_info) < 0)
+                return -1;
 
         if (toml_dir(table, &conf->unicast.dir) < 0) {
                 log_err("Invalid directory configuration.");
@@ -533,15 +515,15 @@ static int toml_unicast(toml_table_t *       table,
         return 0;
 }
 
-static int toml_autobind(toml_table_t * table,
-                         pid_t          pid,
-                         const char *   name,
-                         const char *   layer)
+static int toml_autobind(toml_datum_t table,
+                         pid_t        pid,
+                         const char * name,
+                         const char * layer)
 {
         toml_datum_t autobind;
 
-        autobind = toml_bool_in(table, "autobind");
-        if (!autobind.ok)
+        autobind = toml_get(table, "autobind");
+        if (autobind.type != TOML_BOOLEAN || !autobind.u.boolean)
                 return 0;
 
         if (bind_process(pid, name) < 0) {
@@ -557,25 +539,24 @@ static int toml_autobind(toml_table_t * table,
         return 0;
 }
 
-static int toml_register(toml_table_t * table,
-                         pid_t          pid)
+static int toml_register(toml_datum_t table,
+                         pid_t        pid)
 {
-        toml_array_t *   reg;
-        int              i;
-        int              ret = 0;
+        toml_datum_t reg;
+        toml_datum_t name;
+        int          i;
+        int          ret = 0;
         struct name_info info = {
                 .pol_lb = LB_SPILL
         };
 
-        reg = toml_array_in(table, "reg");
-        if (reg == NULL)
+        reg = toml_get(table, "reg");
+        if (reg.type != TOML_ARRAY)
                 return 0;
 
-        for (i = 0; ret == 0; i++) {
-                toml_datum_t name;
-
-                name = toml_string_at(reg, i);
-                if (!name.ok)
+        for (i = 0; ret == 0 && i < reg.u.arr.size; i++) {
+                name = reg.u.arr.elem[i];
+                if (name.type != TOML_STRING)
                         break;
 
                 log_dbg("Registering %s in %d", name.u.s, pid);
@@ -583,27 +564,23 @@ static int toml_register(toml_table_t * table,
                 strcpy(info.name, name.u.s);
 
                 ret = name_create(&info);
-                if (ret < 0 && ret != -ENAME) {
-                        free(name.u.s);
+                if (ret < 0 && ret != -ENAME)
                         break;
-                }
 
                 ret = name_reg(name.u.s, pid);
-                free(name.u.s);
         }
 
         return ret;
 }
 
 /* Fills in a peer's eth PoA; dst MAC stays zero, the resolve marker. */
-static int toml_peer_eth(toml_table_t *    tbl,
+static int toml_peer_eth(toml_datum_t      tbl,
                          struct poa_addr * addr)
 {
         toml_datum_t dev;
         toml_datum_t et;
-        int          ret = -1;
 
-        dev = toml_string_in(tbl, "dev");
+        dev = toml_get(tbl, "dev");
 
         memset(addr, 0, sizeof(*addr));
 
@@ -611,32 +588,27 @@ static int toml_peer_eth(toml_table_t *    tbl,
         addr->eth.src.ethertype = POA_ETHERTYPE;
         addr->eth.dst.ethertype = POA_ETHERTYPE;
 
-        et = toml_int_in(tbl, "ethertype");
-        if (et.ok) {
-                if (et.u.i < 0 || et.u.i > 0xFFFF) {
+        et = toml_get(tbl, "ethertype");
+        if (et.type == TOML_INT64) {
+                if (et.u.int64 < 0 || et.u.int64 > 0xFFFF) {
                         log_err("Invalid ethertype.");
-                        goto fail;
+                        return -1;
                 }
 
-                addr->eth.src.ethertype = et.u.i;
-                addr->eth.dst.ethertype = et.u.i;
+                addr->eth.src.ethertype = et.u.int64;
+                addr->eth.dst.ethertype = et.u.int64;
         }
 
-        if (dev.ok) {
+        if (dev.type == TOML_STRING) {
                 if (strlen(dev.u.s) > DEV_NAME_SIZE) {
                         log_err("Invalid device name %s.", dev.u.s);
-                        goto fail;
+                        return -1;
                 }
 
                 strcpy(addr->eth.src.dev, dev.u.s);
         }
 
-        ret = 0;
- fail:
-        if (dev.ok)
-                free(dev.u.s);
-
-        return ret;
+        return 0;
 }
 
 /* Same grammar as the CLI's udp keyword; see irm_utils.c parse_udp_str. */
@@ -738,18 +710,18 @@ static int toml_peer_udp(const char *      str,
  * fill in. Set to NULL wherever there is no PoA to dial: a bare
  * dst-only table (recursive lookup) or any parse failure.
  */
-static int toml_peer(toml_table_t *     tbl,
+static int toml_peer(toml_datum_t       tbl,
                      char *             dst,
                      struct poa_addr ** paddr)
 {
         struct poa_addr * addr = *paddr;
-        toml_table_t *    eth;
         toml_datum_t      name;
+        toml_datum_t      eth;
         toml_datum_t      udp;
-        int               ret = -1;
+        int               ret;
 
-        name = toml_string_in(tbl, "dst");
-        if (!name.ok) {
+        name = toml_get(tbl, "dst");
+        if (name.type != TOML_STRING) {
                 log_err("PoA table entry has no dst.");
 
                 *paddr = NULL;
@@ -758,109 +730,96 @@ static int toml_peer(toml_table_t *     tbl,
 
         if (strlen(name.u.s) > LAYER_NAME_SIZE) {
                 log_err("Destination name too long: %s.", name.u.s);
-                free(name.u.s);
 
                 *paddr = NULL;
                 return -1;
         }
 
         strcpy(dst, name.u.s);
-        free(name.u.s);
 
-        eth = toml_table_in(tbl, "eth");
-        udp = toml_string_in(tbl, "udp");
-        if (eth != NULL && udp.ok) {
+        eth = toml_get(tbl, "eth");
+        udp = toml_get(tbl, "udp");
+        if (eth.type == TOML_TABLE && udp.type == TOML_STRING) {
                 log_err("A PoA is eth or udp, not both.");
 
                 *paddr = NULL;
-                goto fail;
+                return -1;
         }
 
-        if (eth == NULL && !udp.ok) {
+        if (eth.type != TOML_TABLE && udp.type != TOML_STRING) {
                 *paddr = NULL;
-                ret = 0;
-                goto fail;
+                return 0;
         }
 
-        if (eth != NULL)
+        if (eth.type == TOML_TABLE)
                 ret = toml_peer_eth(eth, addr);
         else
                 ret = toml_peer_udp(udp.u.s, addr);
 
         if (ret < 0)
                 *paddr = NULL;
- fail:
-        if (udp.ok)
-                free(udp.u.s);
 
         return ret;
 }
 
-static int toml_connect(toml_table_t * table,
-                        pid_t          pid)
+static int toml_connect(toml_datum_t table,
+                        pid_t        pid)
 {
-        toml_array_t * conn;
-        int            i;
-        int            ret = 0;
+        toml_datum_t conn;
+        int          i;
+        int          ret = 0;
 
-        conn = toml_array_in(table, "conn");
-        if (conn == NULL)
+        conn = toml_get(table, "conn");
+        if (conn.type != TOML_ARRAY)
                 return 0;
 
-        for (i = 0; ret == 0; i++) {
-                toml_datum_t      dst;
-                toml_table_t *    tbl;
+        for (i = 0; ret == 0 && i < conn.u.arr.size; i++) {
+                toml_datum_t      entry;
                 struct poa_addr   addr;
                 struct poa_addr * paddr = &addr;
                 char              buf[LAYER_NAME_SIZE + 1];
                 const char *      d;
                 qosspec_t         qs = qos_raw;
 
-                dst = toml_string_at(conn, i);
-                if (dst.ok) {
-                        d     = dst.u.s;
+                entry = conn.u.arr.elem[i];
+                if (entry.type == TOML_STRING) {
+                        d     = entry.u.s;
                         paddr = NULL;
-                } else {
-                        tbl = toml_table_at(conn, i);
-                        if (tbl == NULL)
-                                break;
-
-                        ret = toml_peer(tbl, buf, &paddr);
+                } else if (entry.type == TOML_TABLE) {
+                        ret = toml_peer(entry, buf, &paddr);
                         if (ret < 0)
                                 break;
 
                         d = buf;
+                } else {
+                        break;
                 }
 
                 log_dbg("Connecting %d to %s", pid, d);
 
                 ret = connect_ipcp_resolve(pid, d, MGMT_COMP, qs, paddr);
-
                 if (ret == 0)
                         ret = connect_ipcp_resolve(pid, d, DT_COMP, qs, paddr);
-
-                if (dst.ok)
-                        free(dst.u.s);
         }
 
         return ret;
 }
 
-static int toml_ipcp(toml_table_t *       table,
+static int toml_ipcp(toml_datum_t         table,
                      struct ipcp_info *   info,
                      struct ipcp_config * conf)
 {
-        toml_datum_t   bootstrap;
-        toml_datum_t   enrol;
-        toml_datum_t   transit;
-        toml_table_t * enrol_tbl;
-        bool           have_enrol;
-        int            ret;
+        toml_datum_t bootstrap;
+        toml_datum_t enrol;
+        toml_datum_t transit;
+        bool         have_boot;
+        bool         have_enrol;
+        int          ret;
 
         log_dbg("Found IPCP %s in configuration file.", info->name);
 
-        transit = toml_bool_in(table, "transit");
-        if (transit.ok && !transit.u.b)
+        transit = toml_get(table, "transit");
+        if (transit.type == TOML_BOOLEAN && !transit.u.boolean)
                 info->flags &= ~IPCP_FLAG_TRANSIT;
 
         if (create_ipcp(info) < 0) {
@@ -868,19 +827,18 @@ static int toml_ipcp(toml_table_t *       table,
                 return -1;
         }
 
-        bootstrap = toml_string_in(table, "bootstrap");
-        enrol     = toml_string_in(table, "enrol");
+        bootstrap = toml_get(table, "bootstrap");
+        enrol     = toml_get(table, "enrol");
 
-        enrol_tbl  = enrol.ok ? NULL : toml_table_in(table, "enrol");
-
-        have_enrol = enrol.ok || enrol_tbl != NULL;
-        if (bootstrap.ok && have_enrol) {
+        have_boot  = bootstrap.type == TOML_STRING;
+        have_enrol = enrol.type == TOML_STRING || enrol.type == TOML_TABLE;
+        if (have_boot && have_enrol) {
                 log_err("Ignoring bootstrap for IPCP %s.", info->name);
-                free(bootstrap.u.s);
-                bootstrap.ok = false;
+
+                have_boot = false;
         }
 
-        if (!bootstrap.ok && !have_enrol) {
+        if (!have_boot && !have_enrol) {
                 log_dbg("Nothing more to do for %s.", info->name);
                 return 0;
         }
@@ -898,11 +856,11 @@ static int toml_ipcp(toml_table_t *       table,
                 char              buf[LAYER_NAME_SIZE + 1];
                 const char *      dst;
 
-                if (enrol.ok) {
+                if (enrol.type == TOML_STRING) {
                         dst   = enrol.u.s;
                         paddr = NULL;
                 } else {
-                        if (toml_peer(enrol_tbl, buf, &paddr) < 0) {
+                        if (toml_peer(enrol, buf, &paddr) < 0) {
                                 log_err("Invalid enrol table for %s.",
                                         info->name);
                                 return -1;
@@ -911,9 +869,6 @@ static int toml_ipcp(toml_table_t *       table,
                 }
 
                 ret = enroll_ipcp_resolve(info->pid, dst, paddr);
-
-                if (enrol.ok)
-                        free(enrol.u.s);
                 if (ret < 0) {
                         log_err("Failed to enrol %s.", info->name);
                         return -1;
@@ -938,11 +893,10 @@ static int toml_ipcp(toml_table_t *       table,
                 return 0;
         }
 
-        assert(bootstrap.ok);
+        assert(have_boot);
 
         if (strlen(bootstrap.u.s) > LAYER_NAME_SIZE) {
                 log_err("Layer name too long: %s", bootstrap.u.s);
-                free(bootstrap.u.s);
                 return -1;
         }
 
@@ -965,7 +919,6 @@ static int toml_ipcp(toml_table_t *       table,
                 return -1;
 
         strcpy(conf->layer_info.name, bootstrap.u.s);
-        free(bootstrap.u.s);
 
         if (bootstrap_ipcp(info->pid, conf) < 0)
                 return -1;
@@ -982,13 +935,13 @@ static int toml_ipcp(toml_table_t *       table,
         return 0;
 }
 
-static int toml_ipcp_list(toml_table_t * table,
+static int toml_ipcp_list(toml_datum_t   table,
                           enum ipcp_type type)
 {
-        int  i   = 0;
-        int  ret = 0;
+        int i   = 0;
+        int ret = 0;
 
-        for (i = 0; ret == 0; i++) {
+        for (i = 0; ret == 0 && i < table.u.tab.size; i++) {
                 const char *       key;
                 struct ipcp_info   info;
                 struct ipcp_config conf;
@@ -996,12 +949,14 @@ static int toml_ipcp_list(toml_table_t * table,
                 memset(&conf, 0, sizeof(conf));
                 memset(&info, 0, sizeof(info));
 
-                key = toml_key_in(table, i);
-                if (key == NULL)
-                        break;
-
+                key = table.u.tab.key[i];
                 if (strlen(key) > IPCP_NAME_SIZE) {
                         log_err("IPCP name too long: %s,", key);
+                        return -1;
+                }
+
+                if (table.u.tab.value[i].type != TOML_TABLE) {
+                        log_err("IPCP %s is not a table.", key);
                         return -1;
                 }
 
@@ -1012,7 +967,7 @@ static int toml_ipcp_list(toml_table_t * table,
 
                 conf.type = type;
 
-                ret = toml_ipcp(toml_table_in(table, key), &info, &conf);
+                ret = toml_ipcp(table.u.tab.value[i], &info, &conf);
         }
 
         return ret;
@@ -1101,44 +1056,39 @@ static int toml_prog(const char * prog,
         return ret;
 }
 
-static int toml_prog_list(toml_array_t * progs,
-                          toml_array_t * args,
-                          const char *   name)
+/* Arguments pair with programs by index until the first one missing. */
+static int toml_prog_list(toml_datum_t progs,
+                          toml_datum_t args,
+                          const char * name)
 {
-        int ret = 0;
-        int i;
+        toml_datum_t prog;
+        const char * arg;
+        int          nargs;
+        int          ret = 0;
+        int          i;
 
-        for (i = 0; ret == 0; i++) {
-                toml_datum_t prog;
-                toml_datum_t arg;
+        nargs = args.type == TOML_ARRAY ? args.u.arr.size : 0;
 
-                prog = toml_string_at(progs, i);
-                if (!prog.ok)
+        for (i = 0; ret == 0 && i < progs.u.arr.size; i++) {
+                prog = progs.u.arr.elem[i];
+                if (prog.type != TOML_STRING)
                         break;
 
-                if (args == NULL) {
-                        ret = toml_prog(prog.u.s, NULL, name);
-                } else {
-                        arg = toml_string_at(args, i);
-                        if (!arg.ok) {
-                                args = NULL; /* no more arguments in list. */
-                                assert(arg.u.s == NULL);
-                        }
+                arg = NULL;
 
-                        ret = toml_prog(prog.u.s, arg.u.s, name);
+                if (i < nargs && args.u.arr.elem[i].type == TOML_STRING)
+                        arg = args.u.arr.elem[i].u.s;
+                else
+                        nargs = 0;
 
-                        if (arg.ok)
-                                free(arg.u.s);
-                }
-
-                free(prog.u.s);
+                ret = toml_prog(prog.u.s, arg, name);
         }
 
         return ret;
 }
 
-static int cp_chk_path(char * buf,
-                       char * path)
+static int cp_chk_path(char *       buf,
+                       const char * path)
 {
         char * rp;
 
@@ -1157,29 +1107,26 @@ static int cp_chk_path(char * buf,
 
         strcpy(buf, rp);
         free(rp);
-        free(path);
 
         return 0;
 
  fail_len:
         free(rp);
  fail_rp:
-        free(path);
         return -1;
 }
 
-static int toml_name(toml_table_t * table,
-                     const char *   name)
+static int toml_name(toml_datum_t table,
+                     const char * name)
 {
-        toml_array_t * progs;
-        toml_array_t * args;
-        toml_datum_t   lb;
-        toml_datum_t   ssec;
-        toml_datum_t   scrt;
-        toml_datum_t   skey;
-        toml_datum_t   csec;
-        toml_datum_t   ccrt;
-        toml_datum_t   ckey;
+        toml_datum_t progs;
+        toml_datum_t lb;
+        toml_datum_t ssec;
+        toml_datum_t scrt;
+        toml_datum_t skey;
+        toml_datum_t csec;
+        toml_datum_t ccrt;
+        toml_datum_t ckey;
 
         struct name_info info = {
                 .pol_lb = LB_SPILL
@@ -1194,43 +1141,43 @@ static int toml_name(toml_table_t * table,
 
         strcpy(info.name, name);
 
-        lb = toml_string_in(table, "lb");
-        if (lb.ok) {
+        lb = toml_get(table, "lb");
+        if (lb.type == TOML_STRING) {
                 if (strcmp(lb.u.s, "spill") == 0)
                         info.pol_lb = LB_SPILL;
                 else if (strcmp(lb.u.s, "round-robin") == 0)
                         info.pol_lb = LB_RR;
                 else
                         info.pol_lb = LB_INVALID;
-                free(lb.u.s);
         }
 
         if (info.pol_lb == LB_INVALID) {
                 log_err("Invalid load-balancing policy for %s.", name);
                 return -1;
         }
-        ssec = toml_string_in(table, "server_sec_file");
-        if (ssec.ok && cp_chk_path(info.s.sec, ssec.u.s) < 0)
+
+        ssec = toml_get(table, "server_sec_file");
+        if (ssec.type == TOML_STRING && cp_chk_path(info.s.sec, ssec.u.s) < 0)
                 return -1;
 
-        scrt = toml_string_in(table, "server_crt_file");
-        if (scrt.ok && cp_chk_path(info.s.crt, scrt.u.s) < 0)
+        scrt = toml_get(table, "server_crt_file");
+        if (scrt.type == TOML_STRING && cp_chk_path(info.s.crt, scrt.u.s) < 0)
                 return -1;
 
-        skey = toml_string_in(table, "server_key_file");
-        if (skey.ok && cp_chk_path(info.s.key, skey.u.s) < 0)
+        skey = toml_get(table, "server_key_file");
+        if (skey.type == TOML_STRING && cp_chk_path(info.s.key, skey.u.s) < 0)
                 return -1;
 
-        csec = toml_string_in(table, "client_sec_file");
-        if (csec.ok && cp_chk_path(info.c.sec, csec.u.s) < 0)
+        csec = toml_get(table, "client_sec_file");
+        if (csec.type == TOML_STRING && cp_chk_path(info.c.sec, csec.u.s) < 0)
                 return -1;
 
-        ccrt = toml_string_in(table, "client_crt_file");
-        if (ccrt.ok && cp_chk_path(info.c.crt, ccrt.u.s) < 0)
+        ccrt = toml_get(table, "client_crt_file");
+        if (ccrt.type == TOML_STRING && cp_chk_path(info.c.crt, ccrt.u.s) < 0)
                 return -1;
 
-        ckey = toml_string_in(table, "client_key_file");
-        if (ckey.ok && cp_chk_path(info.c.key, ckey.u.s) < 0)
+        ckey = toml_get(table, "client_key_file");
+        if (ckey.type == TOML_STRING && cp_chk_path(info.c.key, ckey.u.s) < 0)
                 return -1;
 
         if (name_create(&info) < 0) {
@@ -1238,98 +1185,88 @@ static int toml_name(toml_table_t * table,
                 return -1;
         }
 
-        progs = toml_array_in(table, "prog");
-        if (progs == NULL)
+        progs = toml_get(table, "prog");
+        if (progs.type != TOML_ARRAY)
                 return 0;
 
-        args = toml_array_in(table, "args");
-        if (toml_prog_list(progs, args, name) < 0)
+        if (toml_prog_list(progs, toml_get(table, "args"), name) < 0)
                 return -1;
 
         return 0;
 }
 
-static int toml_name_list(toml_table_t * table)
+static int toml_name_list(toml_datum_t table)
 {
-        int  i   = 0;
-        int  ret = 0;
+        int i;
+        int ret = 0;
 
-        for (i = 0; ret == 0; i++) {
-                const char * key;
+        for (i = 0; ret == 0 && i < table.u.tab.size; i++) {
+                if (table.u.tab.value[i].type != TOML_TABLE) {
+                        log_err("Name %s is not a table.", table.u.tab.key[i]);
+                        return -1;
+                }
 
-                key = toml_key_in(table, i);
-                if (key == NULL)
-                        break;
-
-                ret = toml_name(toml_table_in(table, key), key);
+                ret = toml_name(table.u.tab.value[i], table.u.tab.key[i]);
         }
 
         return ret;
-        return 0;
 }
 
-static int toml_toplevel(toml_table_t * table,
-                         const char *   key)
+static int toml_toplevel(toml_datum_t sub,
+                         const char * key)
 {
-        toml_table_t * subtable;
+        if (sub.type != TOML_TABLE) {
+                log_err("Toplevel key %s is not a table.", key);
+                return -1;
+        }
 
-        subtable = toml_table_in(table, key);
         if (strcmp(key, "name") == 0)
-                return toml_name_list(subtable);
+                return toml_name_list(sub);
         else if (strcmp(key, "local") == 0)
-                return toml_ipcp_list(subtable, IPCP_LOCAL);
+                return toml_ipcp_list(sub, IPCP_LOCAL);
         else if (strcmp(key, "broadcast") == 0)
-                return toml_ipcp_list(subtable, IPCP_BROADCAST);
+                return toml_ipcp_list(sub, IPCP_BROADCAST);
         else if (strcmp(key, "unicast") == 0)
-                return toml_ipcp_list(subtable, IPCP_UNICAST);
+                return toml_ipcp_list(sub, IPCP_UNICAST);
         else
                 log_err("Unkown toplevel key: %s.", key);
+
         return -1;
 }
 
-static int toml_load(toml_table_t * table)
+static int toml_load(toml_datum_t table)
 {
-        int  i   = 0;
-        int  ret = 0;
+        int i;
+        int ret = 0;
 
-        for (i = 0; ret == 0; i++) {
-                const char *   key;
-
-                key = toml_key_in(table, i);
-                if (key == NULL)
-                        break;
-
-                ret = toml_toplevel(table, key);
-        }
+        for (i = 0; ret == 0 && i < table.u.tab.size; i++)
+                ret = toml_toplevel(table.u.tab.value[i], table.u.tab.key[i]);
 
         return ret;
 }
 
 static int toml_cfg(FILE * fp)
 {
-        toml_table_t * table;
-        char           errbuf[ERRBUFSZ + 1];
+        toml_result_t res;
 
         assert(fp != NULL);
 
-        table = toml_parse_file(fp, errbuf, sizeof(errbuf));
-        if (table == NULL) {
-                log_err("Failed to parse config file: %s.", errbuf);
-                goto fail_parse;
+        res = toml_parse_file(fp);
+        if (!res.ok) {
+                log_err("Failed to parse config file: %s.", res.errmsg);
+                goto fail;
         }
 
-        if (toml_load(table) < 0) {
+        if (toml_load(res.toptab) < 0) {
                 log_err("Failed to load configuration.");
-                goto fail_load;
+                goto fail;
         }
 
-        toml_free(table);
+        toml_free(res);
 
         return 0;
-
- fail_load:
-       toml_free(table);
- fail_parse:
+ fail:
+        toml_free(res);
         return -1;
 }
 

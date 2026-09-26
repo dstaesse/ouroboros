@@ -374,6 +374,9 @@ static const struct ipcp_config uni_default_conf = {
 };
 
 static const struct ipcp_config bc_default_conf = {
+        .layer_info = {
+                .dir_hash_algo = DIR_HASH_SHA3_256
+        },
         .type = IPCP_BROADCAST
 };
 
