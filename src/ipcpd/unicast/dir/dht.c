@@ -75,6 +75,7 @@ typedef ProtobufCBinaryData binary_data_t;
 #define DHT_MAX_REQS  128  /* KAD recommends rnd(), bmp can be changed.    */
 #define DHT_WARN_REQS 100  /* Warn if number of requests exceeds this.     */
 #define DHT_MAX_VALS  8    /* Max number of values to return for a key.    */
+#define DHT_MAX_THR   8    /* Max number of packet handler threads.        */
 #define DHT_T_CACHE   60   /* Max cache time for values (s)                */
 #define DHT_T_RESP    2    /* Response time to wait for a response (s).    */
 #define DHT_N_REPUB   5    /* Republish if expiry within n replications.   */
@@ -3935,7 +3936,7 @@ int dht_init(struct dir_dht_config * conf)
                 goto fail_rib_reg;
         }
 
-        dht.tpm = tpm_create(2, 1, dht_handle_packet, NULL);
+        dht.tpm = tpm_create(2, 1, DHT_MAX_THR, dht_handle_packet, NULL);
         if (dht.tpm == NULL) {
                 log_err("Failed to create TPM for DHT.");
                 goto fail_tpm_create;

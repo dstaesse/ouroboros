@@ -51,6 +51,7 @@
 #define SYS_MAX_FLOWS          @SYS_MAX_FLOWS@
 #define IRMD_MIN_THREADS       @IRMD_MIN_THREADS@
 #define IRMD_ADD_THREADS       @IRMD_ADD_THREADS@
+#define IRMD_MAX_THREADS       @IRMD_MAX_THREADS@
 
 #define SSM_PID_GSPP           0
 

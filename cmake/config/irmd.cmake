@@ -34,6 +34,8 @@ set(IRMD_MIN_THREADS 8 CACHE STRING
   "Minimum number of worker threads in the IRMd")
 set(IRMD_ADD_THREADS 8 CACHE STRING
   "Number of extra threads to start when the IRMD faces thread starvation")
+set(IRMD_MAX_THREADS 64 CACHE STRING
+  "Maximum number of worker threads in the IRMd")
 
 # Direct IPC
 set(DISABLE_DIRECT_IPC FALSE CACHE BOOL

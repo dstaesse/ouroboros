@@ -3605,7 +3605,7 @@ static int irm_init(void)
                 log_warn("Failed to mlock pool.");
 
         irmd.tpm = tpm_create(IRMD_MIN_THREADS, IRMD_ADD_THREADS,
-                              mainloop, NULL);
+                              IRMD_MAX_THREADS, mainloop, NULL);
         if (irmd.tpm == NULL) {
                 log_err("Failed to greate thread pool.");
                 goto fail_tpm_create;

@@ -29,6 +29,7 @@
 #include <ouroboros/pthread.h>
 #include <ouroboros/time.h>
 #include <ouroboros/tpm.h>
+#include <ouroboros/utils.h>
 
 #ifdef CONFIG_OUROBOROS_DEBUG
 #define OUROBOROS_PREFIX "tpm"
@@ -64,6 +65,7 @@ enum tpm_state {
 struct tpm {
         size_t           min;
         size_t           inc;
+        size_t           max;
         size_t           cur;
         size_t           wrk;
 
@@ -176,8 +178,10 @@ static int __tpm(struct tpm * tpm)
         tpm_join(tpm);
 
         if (tpm->cur - tpm->wrk < tpm->min) {
+                size_t n = MIN(tpm->inc, tpm->max - tpm->cur);
                 size_t i;
-                for (i = 0; i < tpm->inc; ++i) {
+
+                for (i = 0; i < n; ++i) {
                         struct pthr_el * e = malloc(sizeof(*e));
                         if (e == NULL)
                                 break;
@@ -215,6 +219,7 @@ static void * tpmgr(void * o)
 
 struct tpm * tpm_create(size_t min,
                         size_t inc,
+                        size_t max,
                         void * (* func)(void *),
                         void * o)
 {
@@ -223,6 +228,7 @@ struct tpm * tpm_create(size_t min,
 
         assert(func != NULL);
         assert(inc > 0);
+        assert(max >= min);
 
         tpm = malloc(sizeof(*tpm));
         if (tpm == NULL)
@@ -249,6 +255,7 @@ struct tpm * tpm_create(size_t min,
         tpm->o     = o;
         tpm->min   = min;
         tpm->inc   = inc;
+        tpm->max   = max;
         tpm->cur   = 0;
         tpm->wrk   = 0;
 

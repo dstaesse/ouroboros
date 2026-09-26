@@ -30,6 +30,7 @@ struct tpm;
 
 struct tpm * tpm_create(size_t    min,
                         size_t    inc,
+                        size_t    max,
                         void * (* func)(void *),
                         void *    o);
 

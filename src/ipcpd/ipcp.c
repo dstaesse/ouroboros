@@ -1358,7 +1358,7 @@ int ipcp_init(int               argc,
         list_head_init(&ipcpd.cmds);
 
         ipcpd.tpm = tpm_create(IPCP_MIN_THREADS, IPCP_ADD_THREADS,
-                               mainloop, NULL);
+                               IPCP_MAX_THREADS, mainloop, NULL);
         if (ipcpd.tpm == NULL) {
                 log_err("Failed to create threadpool manager.");
                 goto fail_tpm_create;
