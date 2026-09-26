@@ -321,6 +321,49 @@ static void __reg_cancel_flows_for_proc(pid_t pid)
                 pthread_cond_broadcast(&reg.cond);
 }
 
+static int direct_flow_dealloc(struct reg_flow * flow,
+                               pid_t             pid)
+{
+        if (!flow->direct)
+                return -1;
+
+        if (pid == flow->info.n_pid && flow->info.n_pid != -1)
+                flow->info.n_pid = -1;
+        else if (pid == flow->info.n_1_pid && flow->info.n_1_pid != -1)
+                flow->info.n_1_pid = -1;
+        else
+                return -1;
+
+        return 0;
+}
+
+/* A dead process cannot deallocate its end of a direct flow itself. */
+static void __reg_dealloc_direct_flows_for_proc(pid_t pid)
+{
+        struct list_head * p;
+        struct list_head * h;
+
+        llist_for_each_safe(p, h, &reg.flows) {
+                struct reg_flow * entry;
+
+                entry = list_entry(p, struct reg_flow, next);
+                if (entry->info.state < FLOW_ALLOCATED)
+                        continue;
+
+                if (direct_flow_dealloc(entry, pid) < 0)
+                        continue;
+
+                if (entry->info.state == FLOW_ALLOCATED) {
+                        entry->info.state = FLOW_DEALLOC_PENDING;
+                        continue;
+                }
+
+                llist_del(&entry->next, &reg.flows);
+                bmp_release(reg.ids, entry->info.id);
+                reg_flow_destroy(entry);
+        }
+}
+
 static struct pid_entry * __reg_get_spawned(pid_t pid)
 {
         struct list_head * p;
@@ -1180,6 +1223,7 @@ int reg_destroy_proc(pid_t pid)
                 reg_proc_destroy(proc);
                 __reg_del_proc_from_names(pid);
                 __reg_cancel_flows_for_proc(pid);
+                __reg_dealloc_direct_flows_for_proc(pid);
                 if (pool != NULL && reg_pool_unref(pool) == 0) {
                         llist_del(&pool->next, &reg.pools);
                         reg_pool_destroy(pool);
@@ -2771,10 +2815,13 @@ int reg_wait_flow_direct(int                      flow_id,
 
         while (flow != NULL && flow->rsp_data.data == NULL) {
                 ret = -__timedwait(&reg.cond, &reg.mtx, abstime);
+                flow = __reg_get_flow(flow_id);
                 if (ret == -ETIMEDOUT)
                         break;
-                flow = __reg_get_flow(flow_id);
         }
+
+        if (flow == NULL)
+                ret = -1;
 
         if (flow != NULL && flow->rsp_data.data != NULL) {
                 *pbuf = flow->rsp_data;
@@ -2788,22 +2835,6 @@ int reg_wait_flow_direct(int                      flow_id,
  fail:
         pthread_mutex_unlock(&reg.mtx);
         return -1;
-}
-
-static int direct_flow_dealloc(struct reg_flow * flow,
-                               pid_t             pid)
-{
-        if (!flow->direct)
-                return -1;
-
-        if (pid == flow->info.n_pid && flow->info.n_pid != -1)
-                flow->info.n_pid = -1;
-        else if (pid == flow->info.n_1_pid && flow->info.n_1_pid != -1)
-                flow->info.n_1_pid = -1;
-        else
-                return -1;
-
-        return 0;
 }
 
 void reg_dealloc_flow(struct flow_info * info)

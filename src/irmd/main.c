@@ -1524,6 +1524,7 @@ static int flow_req_arr(struct flow_info * flow,
 }
 
 #ifndef DISABLE_DIRECT_IPC
+/* On a failed OAP, the acceptor keeps its end until its own timeout. */
 static int flow_alloc_direct(const char *       dst,
                              struct flow_info * flow,
                              buffer_t *         data,
@@ -1581,7 +1582,7 @@ static int flow_alloc_direct(const char *       dst,
         if (err < 0) {
                 log_err("OAP completion failed for %s.", dst);
                 freebuf(resp_hdr);
-                return err;
+                goto fail_complete;
         }
 
         flow->id      = acc.id;
@@ -1600,9 +1601,20 @@ static int flow_alloc_direct(const char *       dst,
         freebuf(resp_hdr);
 
         return 0;
+
+ fail_complete:
+        acc.n_pid = flow->n_pid;
+
+        reg_dealloc_flow(&acc);
+
+        if (acc.state == FLOW_DEALLOCATED)
+                reg_destroy_flow(acc.id);
+
+        return err;
 }
 #endif /* DISABLE_DIRECT_IPC */
 
+/* On a failed OAP, the IPCP destroys the flow once it released its end. */
 static int flow_alloc(const char *       dst,
                       struct flow_info * flow,
                       buffer_t *         data,
@@ -1710,7 +1722,15 @@ static int flow_alloc(const char *       dst,
 
  fail_complete:
         freebuf(peer_crt);
-        ctx = NULL; /* free'd on complete */
+        freebuf(resp_hdr);
+        freebuf(req_hdr);
+        freebuf(hash);
+        reg_dealloc_flow(flow);
+
+        if (ipcp_flow_dealloc(flow->n_1_pid, flow->id, 0) < 0)
+                log_err("Failed to request dealloc from %d.", flow->n_1_pid);
+
+        return err;
  fail_peer:
         flow->state = FLOW_DEALLOCATED;
  fail_wait:

@@ -932,6 +932,198 @@ static int test_reg_direct_flow_rekey(void)
         return TEST_RC_FAIL;
 }
 
+/* Direct flow from TEST_N_1_PID to TEST_PID, both registered procs. */
+static int direct_flow_setup(struct flow_info * info)
+{
+        struct proc_info srv = TEST_PROC_INFO;
+        struct proc_info cli = TEST_PROC_INFO;
+        struct flow_info acc;
+        struct timespec  abstime;
+        struct timespec  timeo = TIMESPEC_INIT_S(1);
+        buffer_t         req;
+        buffer_t         rsp;
+        buffer_t         buf   = BUF_INIT;
+
+        cli.pid = TEST_N_1_PID;
+
+        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
+        ts_add(&abstime, &timeo, &abstime);
+
+        if (reg_create_proc(&srv) < 0) {
+                printf("Failed to create server process.\n");
+                return -1;
+        }
+
+        if (reg_create_proc(&cli) < 0) {
+                printf("Failed to create client process.\n");
+                return -1;
+        }
+
+        if (reg_create_flow(info) < 0) {
+                printf("Failed to add flow.\n");
+                return -1;
+        }
+
+        if (reg_prepare_flow_accept(info) < 0) {
+                printf("Failed to prepare for accept.\n");
+                return -1;
+        }
+
+        memset(&acc, 0, sizeof(acc));
+
+        acc.id      = info->id;
+        acc.n_1_pid = TEST_N_1_PID;
+        acc.mpl     = TEST_MPL;
+        acc.qs      = qos_raw;
+        acc.state   = FLOW_ALLOCATED;
+
+        req.data = (uint8_t *) strdup(TEST_DATA);
+        if (req.data == NULL) {
+                printf("Failed to strdup req data.\n");
+                return -1;
+        }
+
+        req.len = strlen(TEST_DATA) + 1;
+        if (reg_prepare_flow_direct(&acc, &req, 0) < 0) {
+                printf("Failed to prepare direct flow.\n");
+                freebuf(req);
+                return -1;
+        }
+
+        if (reg_wait_flow_accepted(info, &buf, &abstime) < 0) {
+                printf("Flow accept failed.\n");
+                return -1;
+        }
+
+        freebuf(buf);
+
+        rsp.data = (uint8_t *) strdup(TEST_DATA2);
+        if (rsp.data == NULL) {
+                printf("Failed to strdup rsp data.\n");
+                return -1;
+        }
+
+        rsp.len = strlen(TEST_DATA2) + 1;
+        if (reg_respond_flow_direct(info->id, &rsp) < 0) {
+                printf("Failed to respond direct.\n");
+                freebuf(rsp);
+                return -1;
+        }
+
+        if (reg_wait_flow_direct(info->id, &buf, &abstime) < 0) {
+                printf("Failed to wait direct flow.\n");
+                return -1;
+        }
+
+        freebuf(buf);
+
+        return 0;
+}
+
+/* The client dies holding its end; the server's dealloc completes it. */
+static int test_reg_direct_flow_peer_exit(void)
+{
+        struct reg_flow * flow;
+
+        struct flow_info info = {
+                .n_pid = TEST_PID,
+                .qs    = qos_raw
+        };
+
+        TEST_START();
+
+        if (reg_init() < 0) {
+                printf("Failed to init registry.\n");
+                goto fail;
+        }
+
+        if (direct_flow_setup(&info) < 0)
+                goto fail;
+
+        if (reg_destroy_proc(TEST_N_1_PID) < 0) {
+                printf("Failed to destroy client process.\n");
+                goto fail;
+        }
+
+        flow = __reg_get_flow(info.id);
+        if (flow == NULL) {
+                printf("Flow destroyed while the server holds it.\n");
+                goto fail;
+        }
+
+        if (flow->info.state != FLOW_DEALLOC_PENDING) {
+                printf("Flow not in dealloc pending.\n");
+                goto fail;
+        }
+
+        reg_dealloc_flow(&info);
+
+        if (info.state != FLOW_DEALLOCATED) {
+                printf("Server dealloc did not complete the flow.\n");
+                goto fail;
+        }
+
+        reg_destroy_flow(info.id);
+
+        reg_destroy_proc(TEST_PID);
+
+        reg_fini();
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail:
+        REG_TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
+/* The server released its end first; the client's death frees the flow. */
+static int test_reg_direct_flow_peer_exit_dealloc(void)
+{
+        struct flow_info info = {
+                .n_pid = TEST_PID,
+                .qs    = qos_raw
+        };
+
+        TEST_START();
+
+        if (reg_init() < 0) {
+                printf("Failed to init registry.\n");
+                goto fail;
+        }
+
+        if (direct_flow_setup(&info) < 0)
+                goto fail;
+
+        reg_dealloc_flow(&info);
+
+        if (info.state != FLOW_DEALLOC_PENDING) {
+                printf("Flow not in dealloc pending.\n");
+                goto fail;
+        }
+
+        if (reg_destroy_proc(TEST_N_1_PID) < 0) {
+                printf("Failed to destroy client process.\n");
+                goto fail;
+        }
+
+        if (reg_has_flow(info.id)) {
+                printf("Flow not destroyed when its last process died.\n");
+                goto fail;
+        }
+
+        reg_destroy_proc(TEST_PID);
+
+        reg_fini();
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail:
+        REG_TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 static int test_reg_flow(void) {
         int rc = 0;
 
@@ -943,6 +1135,8 @@ static int test_reg_flow(void) {
         rc |= test_reg_respond_alloc_duplicate();
         rc |= test_reg_direct_flow_success();
         rc |= test_reg_direct_flow_rekey();
+        rc |= test_reg_direct_flow_peer_exit();
+        rc |= test_reg_direct_flow_peer_exit_dealloc();
 
         return rc;
 }
