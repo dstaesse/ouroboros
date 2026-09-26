@@ -4,6 +4,12 @@
 # Connection manager
 set(CONNMGR_RCV_TIMEOUT 1000 CACHE STRING
   "Timeout for the connection manager to wait for OCEP info (ms).")
+set(CONNMGR_MIN_THREADS 2 CACHE STRING
+  "Minimum number of threads handling incoming connections")
+set(CONNMGR_ADD_THREADS 1 CACHE STRING
+  "Number of extra threads to start when incoming connections queue up")
+set(CONNMGR_MAX_THREADS 8 CACHE STRING
+  "Maximum number of threads handling incoming connections")
 
 # Debugging
 set(IPCP_DEBUG_LOCAL FALSE CACHE BOOL

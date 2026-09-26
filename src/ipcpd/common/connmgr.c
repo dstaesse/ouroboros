@@ -32,6 +32,7 @@
 #include <ouroboros/notifier.h>
 #include <ouroboros/pthread.h>
 #include <ouroboros/qos.h>
+#include <ouroboros/tpm.h>
 
 #include "connmgr.h"
 #include "ipcp.h"
@@ -49,6 +50,13 @@ struct conn_el {
         struct conn      conn;
 };
 
+/* An accepted flow waiting for a handler to run OCEP on it. */
+struct fd_el {
+        struct list_head next;
+        int              fd;
+        qosspec_t        qs;
+};
+
 struct comp {
         struct conn_info info;
 
@@ -56,21 +64,28 @@ struct comp {
         struct list_head pending;
 
         pthread_cond_t   cond;
-        pthread_mutex_t  lock;
+        pthread_mutex_t  mtx;
 };
 
 struct {
-        struct comp        comps[COMPID_MAX];
+        struct comp      comps[COMPID_MAX];
 
-        pthread_t          acceptor;
+        struct list_head inbox;
+        pthread_cond_t   cond;
+        pthread_mutex_t  mtx;
+        struct tpm *     tpm;
+
+        pthread_t        acceptor;
 } connmgr;
 
 static bool is_eth_query(const struct poa_addr * addr)
 {
         static const uint8_t zero[POA_MAC_SIZE] = { 0 };
 
-        return addr->type == POA_ETH &&
-                memcmp(addr->eth.dst.mac, zero, POA_MAC_SIZE) == 0;
+        if (addr->type != POA_ETH)
+                return false;
+
+        return memcmp(addr->eth.dst.mac, zero, POA_MAC_SIZE) == 0;
 }
 
 static int get_id_by_name(const char * name)
@@ -90,19 +105,20 @@ static int get_conn_by_fd(int           fd,
 {
         struct list_head * p;
 
-        pthread_mutex_lock(&connmgr.comps[id].lock);
+        pthread_mutex_lock(&connmgr.comps[id].mtx);
 
         list_for_each(p, &connmgr.comps[id].conns) {
-                struct conn_el * c =
-                        list_entry(p, struct conn_el, next);
+                struct conn_el * c = list_entry(p, struct conn_el, next);
+
                 if (c->conn.flow_info.fd == fd) {
                         *conn = c->conn;
-                        pthread_mutex_unlock(&connmgr.comps[id].lock);
+
+                        pthread_mutex_unlock(&connmgr.comps[id].mtx);
                         return 0;
                 }
         }
 
-        pthread_mutex_unlock(&connmgr.comps[id].lock);
+        pthread_mutex_unlock(&connmgr.comps[id].mtx);
 
         return -1;
 }
@@ -124,32 +140,153 @@ static int add_comp_conn(enum comp_id       id,
         el->conn.flow_info.fd = fd;
         el->conn.flow_info.qs = qs;
 
-        pthread_mutex_lock(&connmgr.comps[id].lock);
+        pthread_mutex_lock(&connmgr.comps[id].mtx);
 
         list_add(&el->next, &connmgr.comps[id].pending);
         pthread_cond_signal(&connmgr.comps[id].cond);
 
-        pthread_mutex_unlock(&connmgr.comps[id].lock);
+        pthread_mutex_unlock(&connmgr.comps[id].mtx);
 
         return 0;
 }
 
 /* qs is also an in-parameter, and flow_accept writes it back. */
-static void * flow_acceptor(void * o)
+static void handle_flow(int       fd,
+                        qosspec_t qs)
 {
-        int              fd;
         struct conn_info rcv_info;
         struct conn_info fail_info;
         struct timespec  timeo = TIMESPEC_INIT_MS(CONNMGR_RCV_TIMEOUT);
+        int              id;
         int              err;
-
-        (void) o;
 
         memset(&fail_info, 0, sizeof(fail_info));
 
+        log_info("Handling incoming flow %d.", fd);
+
+        fccntl(fd, FLOWSRCVTIMEO, &timeo);
+
+        err = cep_rcv(fd, &rcv_info);
+        if (err < 0) {
+                log_err("Error receiving OCEP info: %d.", err);
+                flow_dealloc(fd);
+                return;
+        }
+
+        log_info("Request to connect to %s.", rcv_info.comp_name);
+
+        id = get_id_by_name(rcv_info.comp_name);
+        if (id < 0) {
+                log_err("Connection request for unknown component %s.",
+                        rcv_info.comp_name);
+                cep_snd(fd, &fail_info);
+                flow_dealloc(fd);
+                return;
+        }
+
+        err = cep_snd(fd, &connmgr.comps[id].info);
+        if (err < 0) {
+                log_err("Failed responding to OCEP request: %d.", err);
+                flow_dealloc(fd);
+                return;
+        }
+
+        fccntl(fd, FLOWSRCVTIMEO, NULL);
+
+        err = add_comp_conn(id, fd, qs, &rcv_info);
+        if (err < 0) {
+                log_err("Failed to add new connection: %d.", err);
+                flow_dealloc(fd);
+                return;
+        }
+
+        log_info("Finished handling incoming flow %d for %s.",
+                 fd, rcv_info.comp_name);
+}
+
+/* A handler is idle only while it waits on the inbox. */
+static void * flow_handler(void * o)
+{
+        struct fd_el * el;
+
+        (void) o;
+
+        while (true) {
+                pthread_mutex_lock(&connmgr.mtx);
+
+                pthread_cleanup_push(__cleanup_mutex_unlock, &connmgr.mtx);
+
+                while (list_is_empty(&connmgr.inbox))
+                        pthread_cond_wait(&connmgr.cond, &connmgr.mtx);
+
+                el = list_first_entry(&connmgr.inbox, struct fd_el, next);
+
+                list_del(&el->next);
+
+                tpm_begin_work(connmgr.tpm);
+
+                pthread_cleanup_pop(true);
+
+                handle_flow(el->fd, el->qs);
+
+                free(el);
+
+                tpm_end_work(connmgr.tpm);
+        }
+
+        return (void *) 0;
+}
+
+static int inbox_push(int       fd,
+                      qosspec_t qs)
+{
+        struct fd_el * el;
+
+        el = malloc(sizeof(*el));
+        if (el == NULL)
+                return -ENOMEM;
+
+        el->fd = fd;
+        el->qs = qs;
+
+        list_head_init(&el->next);
+
+        pthread_mutex_lock(&connmgr.mtx);
+
+        list_add_tail(&el->next, &connmgr.inbox);
+        pthread_cond_signal(&connmgr.cond);
+
+        pthread_mutex_unlock(&connmgr.mtx);
+
+        return 0;
+}
+
+static void inbox_flush(void)
+{
+        struct list_head * p;
+        struct list_head * h;
+
+        pthread_mutex_lock(&connmgr.mtx);
+
+        list_for_each_safe(p, h, &connmgr.inbox) {
+                struct fd_el * el = list_entry(p, struct fd_el, next);
+
+                list_del(&el->next);
+                flow_dealloc(el->fd);
+                free(el);
+        }
+
+        pthread_mutex_unlock(&connmgr.mtx);
+}
+
+static void * flow_acceptor(void * o)
+{
+        int fd;
+
+        (void) o;
+
         while (true) {
                 qosspec_t qs = qos_raw;
-                int       id;
 
                 fd = flow_accept(&qs, NULL);
                 if (fd < 0) {
@@ -158,49 +295,27 @@ static void * flow_acceptor(void * o)
                         continue;
                 }
 
-                log_info("Handling incoming flow %d.",fd);
-
-                fccntl(fd, FLOWSRCVTIMEO, &timeo);
-
-                err = cep_rcv(fd, &rcv_info);
-                if (err < 0) {
-                        log_err("Error receiving OCEP info: %d.", err);
+                if (inbox_push(fd, qs) < 0) {
+                        log_err("Failed to queue incoming flow %d.", fd);
                         flow_dealloc(fd);
-                        continue;
                 }
-
-                log_info("Request to connect to %s.", rcv_info.comp_name);
-
-                id = get_id_by_name(rcv_info.comp_name);
-                if (id < 0) {
-                        log_err("Connection request for unknown component %s.",
-                                rcv_info.comp_name);
-                        cep_snd(fd, &fail_info);
-                        flow_dealloc(fd);
-                        continue;
-                }
-
-                err = cep_snd(fd, &connmgr.comps[id].info);
-                if (err < 0) {
-                        log_err("Failed responding to OCEP request: %d.", err);
-                        flow_dealloc(fd);
-                        continue;
-                }
-
-                fccntl(fd, FLOWSRCVTIMEO, NULL);
-
-                err = add_comp_conn(id, fd, qs, &rcv_info);
-                if (err < 0) {
-                        log_err("Failed to add new connection: %d.", err);
-                        flow_dealloc(fd);
-                        continue;
-                }
-
-                log_info("Finished handling incoming flow %d for %s.",
-                         fd, rcv_info.comp_name);
         }
 
         return (void *) 0;
+}
+
+static bool is_dt_flow_event(int event)
+{
+        switch (event) {
+        case NOTIFY_DT_FLOW_UP:
+                /* FALLTHRU */
+        case NOTIFY_DT_FLOW_DOWN:
+                /* FALLTHRU */
+        case NOTIFY_DT_FLOW_DEALLOC:
+                return true;
+        default:
+                return false;
+        }
 }
 
 static void handle_event(void *       self,
@@ -211,12 +326,10 @@ static void handle_event(void *       self,
 
         (void) self;
 
-        if (!(event == NOTIFY_DT_FLOW_UP ||
-              event == NOTIFY_DT_FLOW_DOWN ||
-              event == NOTIFY_DT_FLOW_DEALLOC))
+        if (!is_dt_flow_event(event))
                 return;
 
-        if (get_conn_by_fd(*((int *) o), COMPID_DT, &conn))
+        if (get_conn_by_fd(*((int *) o), COMPID_DT, &conn) < 0)
                 return;
 
         switch (event) {
@@ -236,12 +349,41 @@ static void handle_event(void *       self,
 
 int connmgr_init(void)
 {
-        if (notifier_reg(handle_event, NULL)) {
+        list_head_init(&connmgr.inbox);
+
+        if (pthread_mutex_init(&connmgr.mtx, NULL) != 0) {
+                log_err("Failed to initialize mutex: %s.", strerror(errno));
+                goto fail_mtx;
+        }
+
+        if (pthread_cond_init(&connmgr.cond, NULL) != 0) {
+                log_err("Failed to initialize condvar: %s.", strerror(errno));
+                goto fail_cond;
+        }
+
+        connmgr.tpm = tpm_create(CONNMGR_MIN_THREADS, CONNMGR_ADD_THREADS,
+                                 CONNMGR_MAX_THREADS, flow_handler, NULL);
+
+        if (connmgr.tpm == NULL) {
+                log_err("Failed to create thread pool.");
+                goto fail_tpm;
+        }
+
+        if (notifier_reg(handle_event, NULL) < 0) {
                 log_err("Failed to register notifier.");
-                return -1;
+                goto fail_notifier;
         }
 
         return 0;
+
+ fail_notifier:
+        tpm_destroy(connmgr.tpm);
+ fail_tpm:
+        pthread_cond_destroy(&connmgr.cond);
+ fail_cond:
+        pthread_mutex_destroy(&connmgr.mtx);
+ fail_mtx:
+        return -1;
 }
 
 void connmgr_fini(void)
@@ -252,22 +394,41 @@ void connmgr_fini(void)
                 connmgr_comp_fini(i);
 
         notifier_unreg(handle_event);
+
+        tpm_destroy(connmgr.tpm);
+
+        pthread_cond_destroy(&connmgr.cond);
+        pthread_mutex_destroy(&connmgr.mtx);
 }
 
 int connmgr_start(void)
 {
-        if (pthread_create(&connmgr.acceptor, NULL, flow_acceptor, NULL)) {
+        if (tpm_start(connmgr.tpm) < 0) {
+                log_err("Failed to start thread pool.");
+                goto fail_tpm;
+        }
+
+        if (pthread_create(&connmgr.acceptor, NULL, flow_acceptor, NULL) != 0) {
                 log_err("Failed to create pthread: %s.", strerror(errno));
-                return -1;
+                goto fail_acceptor;
         }
 
         return 0;
+
+ fail_acceptor:
+        tpm_stop(connmgr.tpm);
+ fail_tpm:
+        return -1;
 }
 
 void connmgr_stop(void)
 {
         pthread_cancel(connmgr.acceptor);
         pthread_join(connmgr.acceptor, NULL);
+
+        tpm_stop(connmgr.tpm);
+
+        inbox_flush();
 }
 
 int connmgr_comp_init(enum comp_id             id,
@@ -278,13 +439,12 @@ int connmgr_comp_init(enum comp_id             id,
         assert(id >= 0 && id < COMPID_MAX);
 
         comp = connmgr.comps + id;
-
-        if (pthread_mutex_init(&comp->lock, NULL)) {
+        if (pthread_mutex_init(&comp->mtx, NULL) != 0) {
                 log_err("Failed to initialize mutex: %s.", strerror(errno));
                 goto fail_mutex;
         }
 
-        if (pthread_cond_init(&comp->cond, NULL)) {
+        if (pthread_cond_init(&comp->cond, NULL) != 0) {
                 log_err("Failed to initialize condvar: %s.", strerror(errno));
                 goto fail_cond;
         }
@@ -297,7 +457,7 @@ int connmgr_comp_init(enum comp_id             id,
         return 0;
 
  fail_cond:
-        pthread_mutex_destroy(&comp->lock);
+        pthread_mutex_destroy(&comp->mtx);
  fail_mutex:
         return -1;
 }
@@ -315,24 +475,26 @@ void connmgr_comp_fini(enum comp_id id)
 
         comp = connmgr.comps + id;
 
-        pthread_mutex_lock(&comp->lock);
+        pthread_mutex_lock(&comp->mtx);
 
         list_for_each_safe(p, h, &comp->conns) {
                 struct conn_el * e = list_entry(p, struct conn_el, next);
+
                 list_del(&e->next);
                 free(e);
         }
 
         list_for_each_safe(p, h, &comp->pending) {
                 struct conn_el * e = list_entry(p, struct conn_el, next);
+
                 list_del(&e->next);
                 free(e);
         }
 
-        pthread_mutex_unlock(&comp->lock);
+        pthread_mutex_unlock(&comp->mtx);
 
         pthread_cond_destroy(&comp->cond);
-        pthread_mutex_destroy(&comp->lock);
+        pthread_mutex_destroy(&comp->mtx);
 
         memset(&connmgr.comps[id].info, 0, sizeof(connmgr.comps[id].info));
 }
@@ -380,16 +542,17 @@ int connmgr_ipcp_connect(const char *            dst,
         if (strlen(dst) > DST_MAX_STRLEN) {
                 log_warn("Truncating dst length for connection.");
                 memcpy(ce->conn.flow_info.dst, dst, DST_MAX_STRLEN);
+
                 ce->conn.flow_info.dst[DST_MAX_STRLEN] = '\0';
         } else {
                 strcpy(ce->conn.flow_info.dst, dst);
         }
 
-        pthread_mutex_lock(&connmgr.comps[id].lock);
+        pthread_mutex_lock(&connmgr.comps[id].mtx);
 
         list_add(&ce->next, &connmgr.comps[id].conns);
 
-        pthread_mutex_unlock(&connmgr.comps[id].lock);
+        pthread_mutex_unlock(&connmgr.comps[id].mtx);
 
         return 0;
 
@@ -415,30 +578,33 @@ int connmgr_ipcp_disconnect(const char * dst,
                 return -1;
         }
 
-        pthread_mutex_lock(&connmgr.comps[id].lock);
+        pthread_mutex_lock(&connmgr.comps[id].mtx);
 
-        list_for_each_safe(p,h, &connmgr.comps[id].conns) {
+        list_for_each_safe(p, h, &connmgr.comps[id].conns) {
                 struct conn_el * el = list_entry(p, struct conn_el, next);
+
                 if (strcmp(el->conn.flow_info.dst, dst) == 0) {
                         int ret;
-                        pthread_mutex_unlock(&connmgr.comps[id].lock);
+
                         list_del(&el->next);
+                        pthread_mutex_unlock(&connmgr.comps[id].mtx);
+
                         ret = connmgr_dealloc(id, &el->conn);
+
                         free(el);
+
                         return ret;
                 }
         }
 
-        pthread_mutex_unlock(&connmgr.comps[id].lock);
+        pthread_mutex_unlock(&connmgr.comps[id].mtx);
 
         return 0;
 }
 
 /*
- * Without an address, a peer may be on the wire or reachable through
- * the layer below. A PoA query is cheap and creates no flow, so it
- * goes first; the layer below gets a bounded try before the query
- * retries, and the last try is unbounded.
+ * Try a cheap PoA query first, then a bounded try over the layer
+ * below, then the query again; the last try is unbounded.
  */
 static int alloc_any(const char * dst,
                      qosspec_t *  qs)
@@ -521,17 +687,17 @@ int connmgr_alloc(enum comp_id            id,
 
         fccntl(fd, FLOWSRCVTIMEO, &timeo);
 
-        if (cep_snd(fd, &comp->info)) {
+        if (cep_snd(fd, &comp->info) < 0) {
                 log_err("Failed to send OCEP info.");
                 goto fail_cep;
         }
 
-        if (cep_rcv(fd, &conn->conn_info)) {
+        if (cep_rcv(fd, &conn->conn_info) < 0) {
                 log_err("Failed to receive OCEP info.");
                 goto fail_cep;
         }
 
-        if (strcmp(comp->info.protocol, conn->conn_info.protocol)) {
+        if (strcmp(comp->info.protocol, conn->conn_info.protocol) != 0) {
                 log_err("Unknown protocol (requested %s, got %s).",
                         comp->info.protocol, conn->conn_info.protocol);
                 goto fail_cep;
@@ -586,7 +752,6 @@ int connmgr_dealloc(enum comp_id  id,
         return flow_dealloc(conn->flow_info.fd);
 }
 
-
 int connmgr_wait(enum comp_id  id,
                  struct conn * conn)
 {
@@ -598,18 +763,18 @@ int connmgr_wait(enum comp_id  id,
 
         comp = connmgr.comps + id;
 
-        pthread_mutex_lock(&comp->lock);
+        pthread_mutex_lock(&comp->mtx);
 
-        pthread_cleanup_push(__cleanup_mutex_unlock, &comp->lock);
+        pthread_cleanup_push(__cleanup_mutex_unlock, &comp->mtx);
 
         while (list_is_empty(&comp->pending))
-                pthread_cond_wait(&comp->cond, &comp->lock);
+                pthread_cond_wait(&comp->cond, &comp->mtx);
 
         pthread_cleanup_pop(false);
 
         el = list_first_entry((&comp->pending), struct conn_el, next);
         if (el == NULL) {
-                pthread_mutex_unlock(&comp->lock);
+                pthread_mutex_unlock(&comp->mtx);
                 log_err("Failed to get connection element.");
                 return -1;
         }
@@ -619,7 +784,7 @@ int connmgr_wait(enum comp_id  id,
         list_del(&el->next);
         list_add(&el->next, &connmgr.comps[id].conns);
 
-        pthread_mutex_unlock(&comp->lock);
+        pthread_mutex_unlock(&comp->mtx);
 
         return 0;
 }
