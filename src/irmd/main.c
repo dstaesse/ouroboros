@@ -186,10 +186,15 @@ static void irmd_set_state(enum irm_state state)
         pthread_rwlock_unlock(&irmd.state_lock);
 }
 
-static pid_t spawn_program(char ** argv)
+/* IPCPs keep the IRMd's blocked signals; programs get a clean slate. */
+static pid_t spawn_program(char ** argv,
+                           bool    clean)
 {
-        pid_t       pid;
-        struct stat s;
+        posix_spawnattr_t attr;
+        sigset_t          none;
+        sigset_t          all;
+        pid_t             pid;
+        struct stat       s;
 
         if (stat(argv[0], &s) != 0) {
                 log_warn("Program %s does not exist.", argv[0]);
@@ -201,10 +206,28 @@ static pid_t spawn_program(char ** argv)
                 return -1;
         }
 
-        if (posix_spawn(&pid, argv[0], NULL, NULL, argv, NULL)) {
-                log_err("Failed to spawn new process for %s.", argv[0]);
+        if (posix_spawnattr_init(&attr) != 0) {
+                log_err("Failed to init spawn attributes for %s.", argv[0]);
                 return -1;
         }
+
+        sigemptyset(&none);
+        sigfillset(&all);
+
+        if (clean) {
+                posix_spawnattr_setsigmask(&attr, &none);
+                posix_spawnattr_setsigdefault(&attr, &all);
+                posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETSIGMASK |
+                                         POSIX_SPAWN_SETSIGDEF);
+        }
+
+        if (posix_spawn(&pid, argv[0], NULL, &attr, argv, NULL) != 0) {
+                log_err("Failed to spawn new process for %s.", argv[0]);
+                posix_spawnattr_destroy(&attr);
+                return -1;
+        }
+
+        posix_spawnattr_destroy(&attr);
 
         log_info("Instantiated %s as process %d.", argv[0], pid);
 
@@ -255,7 +278,7 @@ static pid_t spawn_ipcp(struct ipcp_info * info)
 
         argv[4] = NULL;
 
-        pid = spawn_program(argv);
+        pid = spawn_program(argv, false);
         if (pid < 0) {
                 log_err("Failed to spawn IPCP %s.", info->name);
                 return -1;
@@ -1431,12 +1454,14 @@ static int get_ipcp_by_dst(const char *     dst,
         return err;
 }
 
+/* A started program is tracked so shutdown terminates and reaps it. */
 static int wait_for_accept(const char * name)
 {
-        struct timespec   timeo = TIMESPEC_INIT_MS(IRMD_REQ_ARR_TIMEOUT);
-        struct timespec   abstime;
-        char **           exec;
-        int               ret;
+        struct timespec timeo = TIMESPEC_INIT_MS(IRMD_REQ_ARR_TIMEOUT);
+        struct timespec abstime;
+        char **         exec;
+        pid_t           pid;
+        int             ret;
 
         clock_gettime(PTHREAD_COND_CLOCK, &abstime);
         ts_add(&abstime, &timeo, &abstime);
@@ -1448,10 +1473,14 @@ static int wait_for_accept(const char * name)
                         goto fail;
                 }
 
-                if (spawn_program(exec) < 0) {
+                pid = spawn_program(exec, true);
+                if (pid < 0) {
                         log_err("Failed to start %s for %s.", exec[0], name);
                         goto fail_spawn;
                 }
+
+                if (reg_create_spawned(pid) < 0)
+                        log_warn("Failed to track process %d.", pid);
 
                 log_info("Starting %s for %s.", exec[0], name);
 
