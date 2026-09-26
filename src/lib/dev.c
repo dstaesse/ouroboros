@@ -712,9 +712,15 @@ static void flow_quiesce(int fd)
                 ssm_rbuff_set_flags(tx_rb, RB_FLOWDOWN);
 }
 
+/* The IRMd may have reused the flow id for a newer fd already. */
 static void do_flow_fini(int fd)
 {
+        struct fmap * map = NULL;
+
         assert(fd >= 0 && fd < PROC_MAX_FLOWS);
+
+        if (proc.flows[fd].info.id != -1)
+                map = &proc.id_to_fd[proc.flows[fd].info.id];
 
         if (proc.flows[fd].poa != NULL)
                 poa_flow_detach(proc.flows[fd].poa);
@@ -725,10 +731,11 @@ static void do_flow_fini(int fd)
         if (proc.flows[fd].part_idx >= 0)
                 ssm_pool_remove(proc.pool, proc.flows[fd].part_idx);
 
-        if (proc.flows[fd].info.id != -1) {
-                flow_destroy(&proc.id_to_fd[proc.flows[fd].info.id]);
+        if (map != NULL && map->fd == fd)
+                flow_destroy(map);
+
+        if (map != NULL)
                 bmp_release(proc.fds, fd);
-        }
 
         if (proc.flows[fd].rx_rb != NULL)
                 ssm_rbuff_close(proc.flows[fd].rx_rb);
@@ -1332,6 +1339,7 @@ int flow_join(const char *            dst,
 }
 
 #define PKT_BUF_LEN 2048
+/* Unmap the flow before the IRMd can hand out its id again. */
 int flow_dealloc(int fd)
 {
         uint8_t         pkt[PKT_BUF_LEN];
@@ -1341,7 +1349,7 @@ int flow_dealloc(int fd)
         struct timespec drain_timeo = TIMESPEC_INIT_MS(SSM_RBUFF_DRAIN_TIMEO);
         struct timespec abstime;
         struct flow *   flow;
-        int             err;
+        int             id;
 
         if (fd < 0 || fd >= PROC_MAX_FLOWS )
                 return -EINVAL;
@@ -1379,13 +1387,14 @@ int flow_dealloc(int fd)
                 ssm_rbuff_drain(flow->tx_rb, &abstime);
         }
 
-        err = irm_flow_dealloc(flow->info.id, &timeo);
+        id = flow->info.id;
 
         flow_fini(fd);
 
-        return err;
+        return irm_flow_dealloc(id, &timeo);
 }
 
+/* Unmap the flow before the IRMd can hand out its id again. */
 int ipcp_flow_dealloc(int fd)
 {
         struct flow_info info;
@@ -1413,21 +1422,16 @@ int ipcp_flow_dealloc(int fd)
 
         pthread_rwlock_unlock(&proc.lock);
 
-        if (ipcp_flow_dealloc__irm_req_ser(&msg, &info) < 0) {
-                err = -ENOMEM;
-                goto out;
-        }
+        flow_fini(fd);
+
+        if (ipcp_flow_dealloc__irm_req_ser(&msg, &info) < 0)
+                return -ENOMEM;
 
         err = send_recv_msg(&msg);
         if (err < 0)
-                goto out;
+                return err;
 
-        err = irm__irm_result_des(&msg);
-
- out:
-        flow_fini(fd);
-
-        return err;
+        return irm__irm_result_des(&msg);
 }
 
 /* A settable delay is a normalised, non-negative timespec. */
