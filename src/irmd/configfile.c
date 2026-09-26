@@ -561,6 +561,11 @@ static int toml_register(toml_datum_t table,
 
                 log_dbg("Registering %s in %d", name.u.s, pid);
 
+                if (strlen(name.u.s) > NAME_SIZE) {
+                        log_err("Name too long: %s.", name.u.s);
+                        return -1;
+                }
+
                 strcpy(info.name, name.u.s);
 
                 ret = name_create(&info);
@@ -877,7 +882,7 @@ static int toml_ipcp(toml_datum_t         table,
                 if (reg_get_ipcp(info, &layer) < 0)
                         return -1;
 
-                if (toml_autobind(table, info->pid, info->name, layer.name))
+                if (toml_autobind(table, info->pid, info->name, layer.name) < 0)
                         return -1;
 
                 if (toml_register(table, info->pid) < 0) {
@@ -886,7 +891,7 @@ static int toml_ipcp(toml_datum_t         table,
                 }
 
                 if (toml_connect(table, info->pid) < 0) {
-                        log_err("Failed to register names.");
+                        log_err("Failed to connect %s.", info->name);
                         return -1;
                 }
 
@@ -1229,7 +1234,7 @@ static int toml_toplevel(toml_datum_t sub,
         else if (strcmp(key, "unicast") == 0)
                 return toml_ipcp_list(sub, IPCP_UNICAST);
         else
-                log_err("Unkown toplevel key: %s.", key);
+                log_err("Unknown toplevel key: %s.", key);
 
         return -1;
 }
