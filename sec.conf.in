@@ -88,6 +88,12 @@
 # the server too for mutual authentication. Combine encryption=none
 # with auth=required for authenticated but unencrypted flows.
 #
+# The client default is the build option OAP_CLIENT_AUTH_DEFAULT (TRUE)
+# and also applies when no client sec.conf exists, so an unconfigured
+# client rejects a server without a certificate. For certificate-less
+# deployments, set auth=optional in the client config, or build with
+# -DOAP_CLIENT_AUTH_DEFAULT=FALSE.
+#
 # Issuer Pinning (cacert=):
 # -------------------------
 #

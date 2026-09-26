@@ -25,7 +25,7 @@ set(OAP_REPLAY_MAX 4096 CACHE STRING
 set(OAP_REKEY_TIMER 120 CACHE STRING
   "Tier-2 re-key interval (s); bounds key age / PCS healing, 0 disables")
 set(OAP_CLIENT_AUTH_DEFAULT TRUE CACHE BOOL
-  "Client requires the server to authenticate by default")
+  "Client requires the server to authenticate by default (FALSE: no certs)")
 set(DEBUG_PROTO_OAP FALSE CACHE BOOL
   "Add Flow allocation protocol message output to IRMd debug logging")
 
