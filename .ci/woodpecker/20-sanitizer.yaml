@@ -4,7 +4,7 @@ depends_on:
 matrix:
   IMAGE:
     - dstaesse/debian:o7s
-    - dstaesse/ubuntu:o7s
+    # - dstaesse/ubuntu:o7s
   COMPILER:
     - clang
     - gcc
