@@ -274,6 +274,20 @@ void ssm_flow_set_del(struct ssm_flow_set * set,
         pthread_mutex_unlock(set->lock);
 }
 
+/* Removes the flow from whichever fqueue it is in. */
+void ssm_flow_set_clear(struct ssm_flow_set * set,
+                        int                   flow_id)
+{
+        assert(set);
+        assert(!(flow_id < 0) && flow_id < SYS_MAX_FLOWS);
+
+        pthread_mutex_lock(set->lock);
+
+        set->mtable[flow_id] = -1;
+
+        pthread_mutex_unlock(set->lock);
+}
+
 int ssm_flow_set_has(struct ssm_flow_set * set,
                      size_t                idx,
                      int                   flow_id)

@@ -238,6 +238,78 @@ fail:
         return TEST_RC_FAIL;
 }
 
+static int test_ssm_flow_set_clear(void)
+{
+        struct ssm_flow_set * set;
+        struct flowevent      events[SSM_RBUFF_SIZE];
+        struct timespec       intv = TIMESPEC_INIT_S(1);
+        struct timespec       abstime;
+        int                   flow_id = 5;
+        ssize_t               ret;
+
+        TEST_START();
+
+        set = ssm_flow_set_create(getpid());
+        if (set == NULL) {
+                printf("Failed to create flow set.\n");
+                goto fail;
+        }
+
+        if (ssm_flow_set_add(set, 1, flow_id) < 0) {
+                printf("Failed to add flow to set.\n");
+                goto fail_set;
+        }
+
+        ssm_flow_set_clear(set, flow_id);
+
+        if (ssm_flow_set_has(set, 1, flow_id)) {
+                printf("Flow should not be in set after clear.\n");
+                goto fail_set;
+        }
+
+        if (ssm_flow_set_add(set, 2, flow_id) < 0) {
+                printf("Failed to add cleared flow to another queue.\n");
+                goto fail_set;
+        }
+
+        ssm_flow_set_notify(set, flow_id, FLOW_PKT);
+
+        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
+        ts_add(&abstime, &intv, &abstime);
+
+        ret = ssm_flow_set_wait(set, 2, events, &abstime);
+        if (ret != 1 || events[0].flow_id != flow_id) {
+                printf("Event should land in the new queue, got %zd.\n", ret);
+                goto fail_set;
+        }
+
+        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
+
+        ret = ssm_flow_set_wait(set, 1, events, &abstime);
+        if (ret != -ETIMEDOUT) {
+                printf("Old queue should get no event, got %zd.\n", ret);
+                goto fail_set;
+        }
+
+        ssm_flow_set_clear(set, 7);
+
+        if (ssm_flow_set_add(set, 1, 7) < 0) {
+                printf("Clearing an absent flow should be a no-op.\n");
+                goto fail_set;
+        }
+
+        ssm_flow_set_destroy(set);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_set:
+        ssm_flow_set_destroy(set);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 int flow_set_test(int     argc,
                   char ** argv)
 {
@@ -250,6 +322,7 @@ int flow_set_test(int     argc,
         ret |= test_ssm_flow_set_add_del_has();
         ret |= test_ssm_flow_set_zero();
         ret |= test_ssm_flow_set_notify_wait();
+        ret |= test_ssm_flow_set_clear();
 
         return ret;
 }

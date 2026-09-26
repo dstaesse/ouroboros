@@ -57,6 +57,9 @@ void                  ssm_flow_set_del(struct ssm_flow_set * set,
                                        size_t                idx,
                                        int                   flow_id);
 
+void                  ssm_flow_set_clear(struct ssm_flow_set * set,
+                                         int                   flow_id);
+
 void                  ssm_flow_set_notify(struct ssm_flow_set * set,
                                           int                   flow_id,
                                           int                   event);

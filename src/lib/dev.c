@@ -731,8 +731,10 @@ static void do_flow_fini(int fd)
         if (proc.flows[fd].part_idx >= 0)
                 ssm_pool_remove(proc.pool, proc.flows[fd].part_idx);
 
-        if (map != NULL && map->fd == fd)
+        if (map != NULL && map->fd == fd) {
+                ssm_flow_set_clear(proc.fqset, proc.flows[fd].info.id);
                 flow_destroy(map);
+        }
 
         if (map != NULL)
                 bmp_release(proc.fds, fd);
@@ -2380,9 +2382,6 @@ int fset_add(struct flow_set * set,
                 goto fail;
         }
 
-        if (flow->frcti != NULL)
-                ssm_flow_set_del(proc.fqset, 0, flow->info.id);
-
         ret = ssm_flow_set_add(proc.fqset, set->idx, flow->info.id);
         if (ret < 0)
                 goto fail;
@@ -2413,9 +2412,6 @@ void fset_del(struct flow_set * set,
 
         if (flow->info.id >= 0)
                 ssm_flow_set_del(proc.fqset, set->idx, flow->info.id);
-
-        if (flow->frcti != NULL)
-                ssm_flow_set_add(proc.fqset, 0, flow->info.id);
 
         pthread_rwlock_unlock(&proc.lock);
 }
