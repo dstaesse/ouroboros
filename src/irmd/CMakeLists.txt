@@ -14,8 +14,9 @@ if(HAVE_TOML)
   install(FILES "${CMAKE_BINARY_DIR}/sec.conf.example"
     DESTINATION "${OUROBOROS_CONFIG_DIR}")
   install(CODE "
-    if(NOT EXISTS \"${OUROBOROS_CONFIG_DIR}/${OUROBOROS_CONFIG_FILE}\")
-      file(WRITE \"${OUROBOROS_CONFIG_DIR}/${OUROBOROS_CONFIG_FILE}\" \"\")
+    set(cfg \"\$ENV{DESTDIR}${OUROBOROS_CONFIG_DIR}/${OUROBOROS_CONFIG_FILE}\")
+    if(NOT EXISTS \"\${cfg}\")
+      file(WRITE \"\${cfg}\" \"\")
     endif()
   ")
   unset(INSTALL_DIR)
@@ -62,6 +63,24 @@ endif()
 ouroboros_target_debug_definitions(irmd)
 
 install(TARGETS irmd RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})
+
+# Certificate stores are public; server and client dirs hold private keys
+set(SEC_DIR_PUB OWNER_READ OWNER_WRITE OWNER_EXECUTE
+  GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+set(SEC_DIR_PRIV OWNER_READ OWNER_WRITE OWNER_EXECUTE)
+foreach(dir CA_CRT UNTRUSTED SRV_CRT CLI_CRT)
+  set(path "${OUROBOROS_${dir}_DIR}")
+  get_filename_component(name "${path}" NAME)
+  get_filename_component(parent "${path}" DIRECTORY)
+  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/security/${name}")
+  if(dir STREQUAL "SRV_CRT" OR dir STREQUAL "CLI_CRT")
+    set(perms ${SEC_DIR_PRIV})
+  else()
+    set(perms ${SEC_DIR_PUB})
+  endif()
+  install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/security/${name}"
+    DESTINATION "${parent}" DIRECTORY_PERMISSIONS ${perms})
+endforeach()
 
 if(BUILD_TESTS)
   add_subdirectory(oap/tests)
