@@ -855,7 +855,7 @@ static void frct_tx_drop_bump(struct frcti * frcti,
                 return;
         }
 
-        if (flags & FRCT_ACK) {
+        if ((flags & (FRCT_ACK | FRCT_DATA)) == FRCT_ACK) {
                 STAT_BUMP(frcti, tx_drop_ack);
                 return;
         }
