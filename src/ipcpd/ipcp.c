@@ -994,6 +994,7 @@ static void do_flow_alloc_resp(int              resp,
                  ret_msg->result);
 }
 
+/* An enrolling IPCP releases its PoA flow before it is operational. */
 static void do_flow_dealloc(int          flow_id,
                             int          timeo_sec,
                             bool         is_poa,
@@ -1003,18 +1004,18 @@ static void do_flow_dealloc(int          flow_id,
 
         log_info("Deallocating flow %d.", flow_id);
 
-        if (ipcp_get_state() != IPCP_OPERATIONAL) {
-                log_err("Failed to enroll: IPCP in state <%s>, need <%s>.",
-                        ipcp_state_str[ipcp_get_state()],
-                        ipcp_state_str[IPCP_OPERATIONAL]);
-                ret_msg->result = -EIPCPSTATE;
-                return;
-        }
-
         if (is_poa) {
                 ret_msg->result = poa_flow_dealloc(flow_id);
 
                 log_info("Finished deallocating PoA flow %d.", flow_id);
+                return;
+        }
+
+        if (ipcp_get_state() != IPCP_OPERATIONAL) {
+                log_err("Failed to dealloc: IPCP in state <%s>, need <%s>.",
+                        ipcp_state_str[ipcp_get_state()],
+                        ipcp_state_str[IPCP_OPERATIONAL]);
+                ret_msg->result = -EIPCPSTATE;
                 return;
         }
 
