@@ -1985,6 +1985,21 @@ static int flow_alloc_reply(struct flow_info * flow,
         return 0;
 }
 
+static int flow_dealloc_resp(struct flow_info * flow)
+{
+        reg_dealloc_flow_resp(flow);
+
+        assert(flow->state == FLOW_DEALLOCATED);
+
+        reg_destroy_flow(flow->id);
+
+        log_info("Completed deallocation of flow_id %d by process %d.",
+                 flow->id, flow->n_1_pid);
+
+        return 0;
+}
+
+/* No N-1 confirms a PoA flow's dealloc: the IRMd completes it. */
 static int flow_dealloc(struct flow_info * flow,
                         struct timespec *  ts)
 {
@@ -2004,19 +2019,8 @@ static int flow_dealloc(struct flow_info * flow,
                 return -EIPCP;
         }
 
-        return 0;
-}
-
-static int flow_dealloc_resp(struct flow_info * flow)
-{
-        reg_dealloc_flow_resp(flow);
-
-        assert(flow->state == FLOW_DEALLOCATED);
-
-        reg_destroy_flow(flow->id);
-
-        log_info("Completed deallocation of flow_id %d by process %d.",
-                 flow->id, flow->n_1_pid);
+        if (reg_flow_is_poa(flow->id))
+                return flow_dealloc_resp(flow);
 
         return 0;
 }
