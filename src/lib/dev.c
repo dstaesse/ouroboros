@@ -2629,12 +2629,12 @@ int np1_flow_dealloc(int    flow_id,
         return fd;
 }
 
-int np1_flow_resp(int flow_id,
-                  int resp)
+/* Waits for the fd: a refusal can arrive before the flow is set up. */
+int np1_flow_resp(int flow_id)
 {
         int fd;
 
-        if (resp == 0 && flow_wait_assign(flow_id) != FLOW_ALLOCATED)
+        if (flow_wait_assign(flow_id) != FLOW_ALLOCATED)
                 return -1;
 
         pthread_rwlock_rdlock(&proc.lock);
@@ -2750,7 +2750,11 @@ int ipcp_flow_req_arr(const buffer_t * dst,
 
         crypt.nid = NID_undef;
 
-        return flow_init(&flow, &crypt, 0, NULL);
+        err = flow_init(&flow, &crypt, 0, NULL);
+        if (err < 0)
+                flow_destroy(&proc.id_to_fd[flow.id]);
+
+        return err;
 }
 
 int ipcp_flow_update_arr(int              flow_id,

@@ -548,8 +548,12 @@ static int fa_flow_init(struct fa_flow * flow)
         return 0;
 }
 
+/* A refused flow is finalised on the reply and again on the dealloc. */
 static void fa_flow_fini(struct fa_flow * flow)
 {
+        if (flow->r_addr == INVALID_ADDR)
+                return;
+
         if (flow->ctx != NULL)
                 ca_ctx_put(flow->ctx);
 

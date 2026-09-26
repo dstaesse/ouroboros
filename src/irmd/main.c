@@ -1275,14 +1275,19 @@ static int flow_accept(struct flow_info * flow,
         if (reg_flow_is_direct(flow->id)) {
                 if (reg_respond_flow_direct(flow->id, &resp_hdr) < 0) {
                         log_err("Failed to respond to direct flow.");
+
+                        err = -EIPCP;
                         goto fail_resp;
                 }
+
                 if (sk->nid != NID_undef)
                         reg_flow_set_rekey(flow->id, false, peer_crt);
                 log_info("Flow %d accepted (direct) by %d for %s.",
                          flow->id, flow->n_pid, name);
         } else if (ipcp_flow_alloc_resp(flow, 0, resp_hdr) < 0) {
                 log_err("Failed to respond to flow allocation.");
+
+                err = -EIPCP;
                 goto fail_resp;
         } else {
                 if (sk->nid != NID_undef)
@@ -1300,21 +1305,24 @@ static int flow_accept(struct flow_info * flow,
  fail_oap:
         if (!reg_flow_is_direct(flow->id))
                 ipcp_flow_alloc_resp(flow, err, resp_hdr);
+ fail_resp:
         freebuf(peer_crt);
         freebuf(req_hdr);
         freebuf(resp_hdr);
+
+        if (reg_flow_is_direct(flow->id) || reg_flow_is_poa(flow->id))
+                goto fail_wait;
+
+        reg_dealloc_flow(flow);
+
+        if (ipcp_flow_dealloc(flow->n_1_pid, flow->id, 0) < 0)
+                log_err("Failed to request dealloc from %d.", flow->n_1_pid);
+
+        return err;
  fail_wait:
         reg_destroy_flow(flow->id);
  fail_flow:
         return err;
-
- fail_resp:
-        flow->state = FLOW_NULL;
-        freebuf(peer_crt);
-        freebuf(req_hdr);
-        freebuf(resp_hdr);
-        reg_destroy_flow(flow->id);
-        return -EIPCP;
 }
 
 static int flow_join(struct flow_info * flow,

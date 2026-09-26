@@ -30,8 +30,7 @@
 int  np1_flow_alloc(pid_t n_pid,
                     int   flow_id);
 
-int  np1_flow_resp(int flow_id,
-                   int resp);
+int  np1_flow_resp(int flow_id);
 
 int  np1_flow_dealloc(int    flow_id,
                       time_t timeo);

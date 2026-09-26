@@ -970,7 +970,7 @@ static void do_flow_alloc_resp(int              resp,
                 return;
         }
 
-        fd = np1_flow_resp(flow_id, resp);
+        fd = np1_flow_resp(flow_id);
         if (fd < 0) {
                 log_warn("Flow_id %d is not known.", flow_id);
                 ret_msg->result = -1;
