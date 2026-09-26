@@ -313,7 +313,7 @@ static int dht_rib_statfile(char * buf,
                  ADDR_VAL32(&dht.addr),
                  dht.alpha, dht.k,
                  dht.t_exp, dht.t_refr, dht.t_repl,
-                 keys, vals, lvals);
+                 keys, lvals, vals);
 
         return strlen(buf);
 }
@@ -370,7 +370,7 @@ static int dht_rib_dbfile(char * buf,
                       "Number of keys:             %10zu\n"
                       "Number of local values:     %10zu\n"
                       "Number of non-local values: %10zu\n\n",
-                      dht.db.kv.ll.len, dht.db.kv.vals, dht.db.kv.lvals);
+                      dht.db.kv.ll.len, dht.db.kv.lvals, dht.db.kv.vals);
 
         llist_for_each(p, &dht.db.kv.ll) {
                 struct dht_entry * e = list_entry(p, struct dht_entry, next);
