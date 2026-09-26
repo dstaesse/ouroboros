@@ -1131,6 +1131,39 @@ static void fini(void)
 __attribute__((section(INIT_SECTION))) __typeof__(init) * __init = init;
 __attribute__((section(FINI_SECTION))) __typeof__(fini) * __fini = fini;
 
+static int irm_flow_dealloc(int                     id,
+                            const struct timespec * timeo)
+{
+        struct flow_info info;
+        uint8_t          buf[SOCK_BUF_SIZE];
+        buffer_t         msg = {SOCK_BUF_SIZE, buf};
+        int              err;
+
+        memset(&info, 0, sizeof(info));
+
+        info.id    = id;
+        info.n_pid = getpid();
+        if (flow_dealloc__irm_req_ser(&msg, &info, timeo) < 0)
+                return -ENOMEM;
+
+        err = send_recv_msg(&msg);
+        if (err < 0)
+                return err;
+
+        return irm__irm_result_des(&msg);
+}
+
+/* Returns a flow the IRMd handed us that we could not set up. */
+static void flow_release(int id)
+{
+        struct timespec timeo = TIMESPEC_INIT_S(0);
+
+        if (id < 0 || id >= SYS_MAX_FLOWS)
+                return;
+
+        irm_flow_dealloc(id, &timeo);
+}
+
 /*
  * A PoA flow is announced by its peer before the accept; from the
  * reply on, the peer may transmit, so the flow must be able to
@@ -1176,13 +1209,17 @@ int flow_accept(qosspec_t *             qs,
         if (err < 0)
                 return err;
 
-        pf = poa_flow_take_pending(flow.id);
+        err = poa_flow_take_pending(&flow, &pf);
+        if (err < 0)
+                goto fail_pending;
 
         fd = flow_init(&flow, &crypt, 0, pf);
-        if (fd >= 0)
-                poa_flow_ready(pf);
-        else if (pf != NULL)
-                poa_flow_detach(pf);
+        if (fd < 0) {
+                err = fd;
+                goto fail_init;
+        }
+
+        poa_flow_ready(pf);
 
         crypt_secure_clear(key, SYMMKEYSZ);
 
@@ -1190,6 +1227,14 @@ int flow_accept(qosspec_t *             qs,
                 *qs = flow.qs;
 
         return fd;
+
+ fail_init:
+        if (pf != NULL)
+                poa_flow_detach(pf);
+ fail_pending:
+        crypt_secure_clear(key, SYMMKEYSZ);
+        flow_release(flow.id);
+        return err;
 }
 
 int flow_alloc(const char *            dst,

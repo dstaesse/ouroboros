@@ -25,13 +25,13 @@
 #define POA_MAX_EIDS     PROC_MAX_FLOWS
 #define POA_ALLOC_TIMEO  10000 /* ms, overall FLOW_REQ deadline  */
 #define POA_RETRY_TIMEO  300   /* ms, FLOW_REQ retransmit period */
+#define POA_RESP_TIMEO   200   /* ms, response waits for the flow id */
 /* Must fit a certificate chain: post-quantum ones are large. */
 #define POA_MGMT_BUFSZ   POA_MGMT_FRAME_SIZE
 #define POA_MGMT_QMAX    64   /* queued management frames per PoA */
 #define POA_PEND_TIMEO   10   /* s, reap a request that never completes */
 #define POA_SWEEP_TIMEO  1000 /* ms, sweep interval */
 #define POA_SWEEP_MAX    16   /* requests reaped per sweep */
-#define POA_DEFER_MAX    64   /* replies waiting for their flow id */
 
 /* EWMA over 8 samples. */
 #define POA_AVG_SHIFT    3
@@ -90,19 +90,6 @@ struct poa_flow {
         buffer_t            resp_data;
 };
 
-/*
- * An answer can be ready before the flow it answers has an id, and
- * the caller must not be kept waiting for one: it answers to the IRMd,
- * which gives up long before we would.
- */
-struct poa_deferred {
-        struct list_head next;
-        struct timespec  t0;
-        int              flow_id;
-        int              response;
-        buffer_t         data;
-};
-
 struct poa_mgmt_frame {
         struct list_head next;
         struct poa *     poa;
@@ -126,8 +113,6 @@ static struct {
         struct list_head  list;
 
         struct poa_flow * id_to_pf[SYS_MAX_FLOWS];
-
-        struct llist      deferred;
 
         pthread_mutex_t   mtx;   /* guards id_to_pf  */
         pthread_cond_t    cond;
@@ -247,25 +232,6 @@ static struct poa_flow * pf_create(struct poa *            poa,
         return NULL;
 }
 
-/* Caller holds poas.mtx. */
-static void deferred_purge(int flow_id)
-{
-        struct list_head * p;
-        struct list_head * h;
-
-        list_for_each_safe(p, h, &poas.deferred.list) {
-                struct poa_deferred * d;
-
-                d = list_entry(p, struct poa_deferred, next);
-                if (d->flow_id != flow_id)
-                        continue;
-
-                llist_del(&d->next, &poas.deferred);
-                freebuf(d->data);
-                free(d);
-        }
-}
-
 /* The id may have moved to a newer flow; only its owner clears it. */
 static void pf_destroy(struct poa_flow * pf)
 {
@@ -291,11 +257,8 @@ static void pf_destroy(struct poa_flow * pf)
 
         pthread_mutex_lock(&poas.mtx);
 
-        if (pf->flow_id >= 0 && poas.id_to_pf[pf->flow_id] == pf) {
+        if (pf->flow_id >= 0 && poas.id_to_pf[pf->flow_id] == pf)
                 poas.id_to_pf[pf->flow_id] = NULL;
-
-                deferred_purge(pf->flow_id);
-        }
 
         pthread_mutex_unlock(&poas.mtx);
 
@@ -353,49 +316,18 @@ static int pf_answer(struct poa_flow * pf,
         return err;
 }
 
-/* Takes an answer left for a flow that had no id yet. */
-static struct poa_deferred * deferred_take(int flow_id)
-{
-        struct list_head * p;
-        struct list_head * h;
-
-        list_for_each_safe(p, h, &poas.deferred.list) {
-                struct poa_deferred * d;
-
-                d = list_entry(p, struct poa_deferred, next);
-                if (d->flow_id != flow_id)
-                        continue;
-
-                llist_del(&d->next, &poas.deferred);
-
-                return d;
-        }
-
-        return NULL;
-}
-
 /* Publishes the flow_id so an answer can find this flow. */
 static void pf_set_flow_id(struct poa_flow * pf,
                            int               flow_id)
 {
-        struct poa_deferred * d;
-
         pthread_mutex_lock(&poas.mtx);
 
         pf->flow_id          = flow_id;
         poas.id_to_pf[flow_id] = pf;
 
-        d = deferred_take(flow_id);
-
         pthread_cond_broadcast(&poas.cond);
 
         pthread_mutex_unlock(&poas.mtx);
-
-        if (d != NULL) {
-                pf_answer(pf, d->response, &d->data);
-                freebuf(d->data);
-                free(d);
-        }
 }
 
 /*
@@ -420,28 +352,28 @@ static void pf_clr_pending(struct poa_flow * pf)
         pthread_mutex_unlock(&poas.mtx);
 }
 
-/* A process that attaches no PoA has nothing pending. */
-struct poa_flow * poa_flow_take_pending(int flow_id)
+int poa_flow_take_pending(const struct flow_info * info,
+                          struct poa_flow **       pf)
 {
-        struct poa_flow * pf;
+        *pf = NULL;
 
-        if (poas.state == POA_NULL)
-                return NULL;
+        if (poas.state == POA_NULL || info->n_1_pid != getpid())
+                return 0;
 
-        if (flow_id < 0 || flow_id >= SYS_MAX_FLOWS)
-                return NULL;
+        if (info->id < 0 || info->id >= SYS_MAX_FLOWS)
+                return -EBADF;
 
         pthread_mutex_lock(&poas.mtx);
 
-        pf = poas.id_to_pf[flow_id];
-        if (pf != NULL && pf->pending)
-                pf->pending = false;
+        *pf = poas.id_to_pf[info->id];
+        if (*pf != NULL && (*pf)->pending)
+                (*pf)->pending = false;
         else
-                pf = NULL;
+                *pf = NULL;
 
         pthread_mutex_unlock(&poas.mtx);
 
-        return pf;
+        return *pf == NULL ? -EBADF : 0;
 }
 
 static struct poa_flow * pf_get(int flow_id)
@@ -641,9 +573,6 @@ int poa_init(const char * name)
         if (pthread_mutex_init(&poas.mtx, NULL) != 0)
                 goto fail_mtx;
 
-        if (pthread_cond_init(&poas.cond, NULL) != 0)
-                goto fail_cond;
-
         if (pthread_mutex_init(&poas.mgmt_mtx, NULL) != 0)
                 goto fail_mgmt_mtx;
 
@@ -652,9 +581,14 @@ int poa_init(const char * name)
 #ifndef __APPLE__
         pthread_condattr_setclock(&cattr, PTHREAD_COND_CLOCK);
 #endif
-        if (pthread_cond_init(&poas.mgmt_cond, &cattr) != 0) {
+        if (pthread_cond_init(&poas.cond, &cattr) != 0) {
                 pthread_condattr_destroy(&cattr);
                 goto fail_cattr;
+        }
+
+        if (pthread_cond_init(&poas.mgmt_cond, &cattr) != 0) {
+                pthread_condattr_destroy(&cattr);
+                goto fail_cond;
         }
 
         pthread_condattr_destroy(&cattr);
@@ -666,7 +600,6 @@ int poa_init(const char * name)
                 goto fail_lock;
 
         list_head_init(&poas.list);
-        llist_init(&poas.deferred);
         llist_init(&poas.mgmt_frames);
         list_head_init(&poas.detach);
 
@@ -687,11 +620,11 @@ int poa_init(const char * name)
         pthread_cond_destroy(&poas.done_cond);
  fail_done_cond:
         pthread_cond_destroy(&poas.mgmt_cond);
+ fail_cond:
+        pthread_cond_destroy(&poas.cond);
  fail_cattr:
         pthread_mutex_destroy(&poas.mgmt_mtx);
  fail_mgmt_mtx:
-        pthread_cond_destroy(&poas.cond);
- fail_cond:
         pthread_mutex_destroy(&poas.mtx);
  fail_mtx:
         return -1;
@@ -1043,9 +976,6 @@ static bool pf_steal(struct poa_flow * pf)
         if (pf->pending) {
                 pf->pending = false;
                 poas.id_to_pf[pf->flow_id] = NULL;
-
-                deferred_purge(pf->flow_id);
-
                 stolen = true;
         }
 
@@ -1097,22 +1027,6 @@ static void sweep_pending(void)
 
         for (i = 0; i < n; ++i)
                 pf_destroy(dead[i]);
-
-        pthread_mutex_lock(&poas.mtx);
-
-        list_for_each_safe(p, q, &poas.deferred.list) {
-                struct poa_deferred * d;
-
-                d = list_entry(p, struct poa_deferred, next);
-                if (now.tv_sec - d->t0.tv_sec < POA_PEND_TIMEO)
-                        continue;
-
-                llist_del(&d->next, &poas.deferred);
-                freebuf(d->data);
-                free(d);
-        }
-
-        pthread_mutex_unlock(&poas.mtx);
 }
 
 void poa_rx_mgmt(struct poa *            poa,
@@ -1721,59 +1635,39 @@ void poa_flow_ready(struct poa_flow * pf)
         freebuf(data);
 }
 
+/*
+ * The IRMd answers the request and this response on different threads,
+ * and replies to the accept only after this returns: wait for the
+ * request to publish the flow id, so the accept finds it.
+ */
 int poa_flow_alloc_resp(int              flow_id,
                         int              response,
                         const buffer_t * data)
 {
-        struct poa_deferred * d;
-        struct poa_flow *     pf;
+        struct timespec   timeo = TIMESPEC_INIT_MS(POA_RESP_TIMEO);
+        struct timespec   abstime;
+        struct poa_flow * pf;
+        int               ret = 0;
 
         if (flow_id < 0 || flow_id >= SYS_MAX_FLOWS)
                 return -EPERM;
 
+        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
+        ts_add(&abstime, &timeo, &abstime);
+
         pthread_mutex_lock(&poas.mtx);
 
+        while (poas.id_to_pf[flow_id] == NULL && ret == 0)
+                ret = pthread_cond_timedwait(&poas.cond, &poas.mtx, &abstime);
+
         pf = poas.id_to_pf[flow_id];
-        if (pf != NULL) {
-                pthread_mutex_unlock(&poas.mtx);
-                return pf_answer(pf, response, data);
-        }
-
-        if (poas.deferred.len >= POA_DEFER_MAX) {
-                pthread_mutex_unlock(&poas.mtx);
-                return -ENOMEM;
-        }
-
-        d = malloc(sizeof(*d));
-        if (d == NULL) {
-                pthread_mutex_unlock(&poas.mtx);
-                return -ENOMEM;
-        }
-
-        memset(d, 0, sizeof(*d));
-
-        clock_gettime(PTHREAD_COND_CLOCK, &d->t0);
-
-        d->flow_id  = flow_id;
-        d->response = response;
-
-        if (data != NULL && data->len > 0) {
-                d->data.data = malloc(data->len);
-                if (d->data.data == NULL) {
-                        free(d);
-                        pthread_mutex_unlock(&poas.mtx);
-                        return -ENOMEM;
-                }
-                memcpy(d->data.data, data->data, data->len);
-
-                d->data.len = data->len;
-        }
-
-        llist_add_tail(&d->next, &poas.deferred);
 
         pthread_mutex_unlock(&poas.mtx);
 
-        return 0;
+        if (pf == NULL)
+                return -ETIMEDOUT;
+
+        return pf_answer(pf, response, data);
 }
 
 int poa_flow_update(int              flow_id,

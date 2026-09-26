@@ -24,6 +24,7 @@
 #define OUROBOROS_LIB_POA_POA_H
 
 #include <ouroboros/atomics.h>
+#include <ouroboros/flow.h>
 #include <ouroboros/ipcp-dev.h>
 #include <ouroboros/list.h>
 #include <ouroboros/qos.h>
@@ -259,7 +260,8 @@ void              poa_flow_ready(struct poa_flow * pf);
 
 void              poa_flow_detach(struct poa_flow * pf);
 
-struct poa_flow * poa_flow_take_pending(int flow_id);
+int               poa_flow_take_pending(const struct flow_info * info,
+                                        struct poa_flow **       pf);
 
 /* Addresses and management messages (poa/addr.c). */
 int               poa_addr_cmp(const struct poa_addr * a,
