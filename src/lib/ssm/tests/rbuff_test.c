@@ -618,6 +618,131 @@ static int test_ssm_rbuff_blocking_flowdown(void)
         return TEST_RC_FAIL;
 }
 
+static void * drain_flowdown_thread(void * o)
+{
+        struct ssm_rbuff * rb = (struct ssm_rbuff *) o;
+        struct timespec    tic = TIMESPEC_INIT_MS(50);
+
+        nanosleep(&tic, NULL);
+
+        ssm_rbuff_set_flags(rb, RB_FLOWDOWN);
+
+        return NULL;
+}
+
+static void * drain_reader_thread(void * o)
+{
+        struct ssm_rbuff * rb = (struct ssm_rbuff *) o;
+        struct timespec    tic = TIMESPEC_INIT_MS(50);
+
+        nanosleep(&tic, NULL);
+
+        while (ssm_rbuff_read(rb) >= 0)
+                ;
+
+        return NULL;
+}
+
+static int test_ssm_rbuff_drain(void)
+{
+        struct ssm_rbuff * rb;
+        struct timespec    abs_timeout;
+        struct timespec    interval = {0, 100 * MILLION};
+        struct timespec    grace    = {1, 0};
+        struct timespec    start;
+        struct timespec    end;
+        pthread_t          thread;
+        long               elapsed_ms;
+        int                ret;
+
+        TEST_START();
+
+        rb = ssm_rbuff_create(getpid(), 11);
+        if (rb == NULL) {
+                printf("Failed to create rbuff.\n");
+                goto fail;
+        }
+
+        if (ssm_rbuff_drain(rb, NULL) != 0) {
+                printf("Drain of an empty rbuff failed.\n");
+                goto fail_rb;
+        }
+
+        if (ssm_rbuff_write(rb, 1) < 0) {
+                printf("Failed to write to rbuff.\n");
+                goto fail_rb;
+        }
+
+        clock_gettime(PTHREAD_COND_CLOCK, &start);
+        ts_add(&start, &interval, &abs_timeout);
+
+        ret = ssm_rbuff_drain(rb, &abs_timeout);
+
+        clock_gettime(PTHREAD_COND_CLOCK, &end);
+
+        if (ret != -ETIMEDOUT) {
+                printf("Expected -ETIMEDOUT, got %d.\n", ret);
+                goto fail_rb;
+        }
+
+        elapsed_ms = ts_diff_ms(&end, &start);
+        if (elapsed_ms < 90 || elapsed_ms > 200) {
+                printf("Drain took %ld ms, expected ~100 ms.\n", elapsed_ms);
+                goto fail_rb;
+        }
+
+        if (pthread_create(&thread, NULL, drain_flowdown_thread, rb) != 0) {
+                printf("Failed to create thread.\n");
+                goto fail_rb;
+        }
+
+        clock_gettime(PTHREAD_COND_CLOCK, &start);
+        ts_add(&start, &grace, &abs_timeout);
+
+        ret = ssm_rbuff_drain(rb, &abs_timeout);
+
+        pthread_join(thread, NULL);
+
+        if (ret != -EFLOWDOWN) {
+                printf("Expected -EFLOWDOWN, got %d.\n", ret);
+                goto fail_rb;
+        }
+
+        ssm_rbuff_clr_flags(rb, RB_FLOWDOWN);
+
+        if (pthread_create(&thread, NULL, drain_reader_thread, rb) != 0) {
+                printf("Failed to create thread.\n");
+                goto fail_rb;
+        }
+
+        clock_gettime(PTHREAD_COND_CLOCK, &start);
+        ts_add(&start, &grace, &abs_timeout);
+
+        ret = ssm_rbuff_drain(rb, &abs_timeout);
+
+        pthread_join(thread, NULL);
+
+        if (ret != 0) {
+                printf("Expected drained rbuff, got %d.\n", ret);
+                goto fail_rb;
+        }
+
+        ssm_rbuff_destroy(rb);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+
+ fail_rb:
+        while (ssm_rbuff_read(rb) >= 0)
+                ;
+
+        ssm_rbuff_destroy(rb);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 static int test_ssm_rbuff_threaded(void)
 {
         struct ssm_rbuff * rb;
@@ -1072,6 +1197,7 @@ int rbuff_test(int     argc,
         ret |= test_ssm_rbuff_blocking();
         ret |= test_ssm_rbuff_blocking_timeout();
         ret |= test_ssm_rbuff_blocking_flowdown();
+        ret |= test_ssm_rbuff_drain();
         ret |= test_ssm_rbuff_limit_off();
         ret |= test_ssm_rbuff_limit_slow();
         ret |= test_ssm_rbuff_limit_fast();

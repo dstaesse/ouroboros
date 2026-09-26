@@ -67,6 +67,9 @@ void               ssm_rbuff_get_txq_target(struct ssm_rbuff * rb,
 
 void               ssm_rbuff_fini(struct ssm_rbuff * rb);
 
+int                ssm_rbuff_drain(struct ssm_rbuff *      rb,
+                                   const struct timespec * abstime);
+
 int                ssm_rbuff_mlock(struct ssm_rbuff * rb);
 
 int                ssm_rbuff_write(struct ssm_rbuff * rb,

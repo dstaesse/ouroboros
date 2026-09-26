@@ -26,6 +26,8 @@ set(SSM_RBUFF_TXQ_PRIO_MUL 2 CACHE STRING
     "Retransmissions get this multiple of the tx occupancy limit")
 set(SSM_RBUFF_TXQ_PRIO_DIV 16 CACHE STRING
     "Ring fraction (1/N) new data leaves to retransmissions")
+set(SSM_RBUFF_DRAIN_TIMEO 2000 CACHE STRING
+    "Time a deallocating flow waits for its tx ring to drain (ms)")
 set(SSM_RBUFF_PREFIX "/${SHM_PREFIX}.rbuff." CACHE INTERNAL
     "Prefix for rbuff POSIX shared memory filenames")
 set(SSM_FLOW_SET_PREFIX "/${SHM_PREFIX}.set." CACHE INTERNAL

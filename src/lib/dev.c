@@ -1334,19 +1334,17 @@ int flow_join(const char *            dst,
 #define PKT_BUF_LEN 2048
 int flow_dealloc(int fd)
 {
-        struct flow_info info;
-        uint8_t          pkt[PKT_BUF_LEN];
-        uint8_t          buf[SOCK_BUF_SIZE];
-        buffer_t         msg = {SOCK_BUF_SIZE, buf};
-        struct timespec  tic   = TIMESPEC_INIT_NS(TICTIME);
-        struct timespec  timeo = TIMESPEC_INIT_S(0);
-        struct flow *    flow;
-        int              err;
+        uint8_t         pkt[PKT_BUF_LEN];
+        uint8_t         buf[SOCK_BUF_SIZE];
+        struct timespec tic   = TIMESPEC_INIT_NS(TICTIME);
+        struct timespec timeo = TIMESPEC_INIT_S(0);
+        struct timespec drain_timeo = TIMESPEC_INIT_MS(SSM_RBUFF_DRAIN_TIMEO);
+        struct timespec abstime;
+        struct flow *   flow;
+        int             err;
 
         if (fd < 0 || fd >= PROC_MAX_FLOWS )
                 return -EINVAL;
-
-        memset(&info, 0, sizeof(info));
 
         flow = &proc.flows[fd];
 
@@ -1368,45 +1366,21 @@ int flow_dealloc(int fd)
 
         flow_read(fd, buf, SOCK_BUF_SIZE);
 
-        pthread_rwlock_rdlock(&proc.lock);
-
         while (FRCTI_LINGERING(flow->frcti)) {
-                ssize_t ret;
-
-                pthread_rwlock_unlock(&proc.lock);
-
-                ret = flow_read(fd, pkt, PKT_BUF_LEN);
-
-                pthread_rwlock_rdlock(&proc.lock);
-
-                if (ret == -EFLOWDOWN)
+                if (flow_read(fd, pkt, PKT_BUF_LEN) == -EFLOWDOWN)
                         break;
         }
 
         timeo.tv_sec = FRCTI_DEALLOC(flow->frcti);
 
-        pthread_cleanup_push(__cleanup_rwlock_unlock, &proc.lock);
-
-        if (flow->tx_rb != NULL)
-                ssm_rbuff_fini(flow->tx_rb);
-
-        pthread_cleanup_pop(true);
-
-        info.id  = flow->info.id;
-        info.n_pid = getpid();
-
-        if (flow_dealloc__irm_req_ser(&msg, &info, &timeo) < 0) {
-                err = -ENOMEM;
-                goto out;
+        if (flow->tx_rb != NULL) {
+                clock_gettime(PTHREAD_COND_CLOCK, &abstime);
+                ts_add(&abstime, &drain_timeo, &abstime);
+                ssm_rbuff_drain(flow->tx_rb, &abstime);
         }
 
-        err = send_recv_msg(&msg);
-        if (err < 0)
-                goto out;
+        err = irm_flow_dealloc(flow->info.id, &timeo);
 
-        err = irm__irm_result_des(&msg);
-
- out:
         flow_fini(fd);
 
         return err;

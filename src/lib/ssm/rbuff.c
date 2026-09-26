@@ -809,6 +809,45 @@ void ssm_rbuff_fini(struct ssm_rbuff * rb)
         FETCH_SUB(&rb->n_users, 1);
 }
 
+int ssm_rbuff_drain(struct ssm_rbuff *      rb,
+                    const struct timespec * abstime)
+{
+        int ret = 0;
+        int err;
+
+        assert(rb != NULL);
+
+        FETCH_ADD(&rb->n_users, 1);
+
+        robust_mutex_lock(rb->mtx);
+
+        pthread_cleanup_push(__cleanup_rbuff_reader, rb);
+
+        while (!IS_EMPTY(rb)) {
+                if (LOAD(rb->flags) & RB_FLOWDOWN) {
+                        ret = -EFLOWDOWN;
+                        break;
+                }
+
+                err = robust_wait(rb->del, rb->mtx, abstime);
+                if (err == EOWNERDEAD)
+                        continue;
+
+                if (err != 0) {
+                        ret = -err;
+                        break;
+                }
+        }
+
+        pthread_cleanup_pop(false);
+
+        pthread_mutex_unlock(rb->mtx);
+
+        FETCH_SUB(&rb->n_users, 1);
+
+        return ret;
+}
+
 size_t ssm_rbuff_queued(struct ssm_rbuff * rb)
 {
         assert(rb != NULL);
