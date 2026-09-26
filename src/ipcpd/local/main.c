@@ -281,7 +281,7 @@ static int local_ipcp_flow_dealloc(int fd)
 {
         assert(!(fd < 0));
 
-        ipcp_flow_fini(fd);
+        ipcp_flow_fini(fd, NP1_GET_POOL(fd));
 
         pthread_rwlock_wrlock(&local_data.lock);
 

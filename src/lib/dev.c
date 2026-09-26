@@ -3126,11 +3126,17 @@ void ipcp_spb_release(struct ssm_pk_buff * spb)
         ssm_pool_remove(proc.pool, ssm_pk_buff_get_off(spb));
 }
 
-int ipcp_flow_fini(int fd)
+/* The IPCP reads this ring: it frees what the N+1 left in it. */
+int ipcp_flow_fini(int               fd,
+                   struct ssm_pool * pool)
 {
         struct ssm_rbuff * rx_rb;
+        ssize_t            off;
 
         assert(fd >= 0 && fd < PROC_MAX_FLOWS);
+
+        if (pool == NULL)
+                pool = proc.pool;
 
         pthread_rwlock_rdlock(&proc.lock);
 
@@ -3152,8 +3158,11 @@ int ipcp_flow_fini(int fd)
 
         pthread_rwlock_unlock(&proc.lock);
 
-        if (rx_rb != NULL)
-                ssm_rbuff_fini(rx_rb);
+        if (rx_rb == NULL)
+                return 0;
+
+        while ((off = ssm_rbuff_read(rx_rb)) >= 0)
+                ssm_pool_remove(pool, off);
 
         return 0;
 }

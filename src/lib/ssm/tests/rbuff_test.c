@@ -549,6 +549,59 @@ static int test_ssm_rbuff_blocking_timeout(void)
         return TEST_RC_FAIL;
 }
 
+static int test_ssm_rbuff_read_flowdown_nonempty(void)
+{
+        struct ssm_rbuff * rb;
+        ssize_t            ret;
+        size_t             i;
+
+        TEST_START();
+
+        rb = ssm_rbuff_create(getpid(), 12);
+        if (rb == NULL) {
+                printf("Failed to create rbuff.\n");
+                goto fail;
+        }
+
+        for (i = 0; i < 8; ++i) {
+                if (ssm_rbuff_write(rb, i) < 0) {
+                        printf("Failed to write to rbuff.\n");
+                        goto fail_rb;
+                }
+        }
+
+        ssm_rbuff_set_flags(rb, RB_FLOWDOWN);
+
+        for (i = 0; i < 8; ++i) {
+                ret = ssm_rbuff_read(rb);
+                if (ret != (ssize_t) i) {
+                        printf("Expected %zu after FLOWDOWN, got %zd.\n",
+                               i, ret);
+                        goto fail_rb;
+                }
+        }
+
+        ret = ssm_rbuff_read(rb);
+        if (ret != -EFLOWDOWN) {
+                printf("Expected -EFLOWDOWN when empty, got %zd.\n", ret);
+                goto fail_rb;
+        }
+
+        ssm_rbuff_destroy(rb);
+
+        TEST_SUCCESS();
+
+        return TEST_RC_SUCCESS;
+ fail_rb:
+        while (ssm_rbuff_read(rb) >= 0)
+                ;
+
+        ssm_rbuff_destroy(rb);
+ fail:
+        TEST_FAIL();
+        return TEST_RC_FAIL;
+}
+
 static int test_ssm_rbuff_blocking_flowdown(void)
 {
         struct ssm_rbuff * rb;
@@ -1197,6 +1250,7 @@ int rbuff_test(int     argc,
         ret |= test_ssm_rbuff_blocking();
         ret |= test_ssm_rbuff_blocking_timeout();
         ret |= test_ssm_rbuff_blocking_flowdown();
+        ret |= test_ssm_rbuff_read_flowdown_nonempty();
         ret |= test_ssm_rbuff_drain();
         ret |= test_ssm_rbuff_limit_off();
         ret |= test_ssm_rbuff_limit_slow();

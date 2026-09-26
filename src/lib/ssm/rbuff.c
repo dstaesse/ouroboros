@@ -789,26 +789,6 @@ void ssm_rbuff_get_txq_target(struct ssm_rbuff * rb,
         UINT64_TO_TS(LOAD_RELAXED(&rb->txq.target), ts);
 }
 
-void ssm_rbuff_fini(struct ssm_rbuff * rb)
-{
-        assert(rb != NULL);
-
-        FETCH_ADD(&rb->n_users, 1);
-
-        robust_mutex_lock(rb->mtx);
-
-        pthread_cleanup_push(__cleanup_rbuff_reader, rb);
-
-        while (!IS_EMPTY(rb))
-                robust_wait(rb->del, rb->mtx, NULL);
-
-        pthread_cleanup_pop(false);
-
-        pthread_mutex_unlock(rb->mtx);
-
-        FETCH_SUB(&rb->n_users, 1);
-}
-
 int ssm_rbuff_drain(struct ssm_rbuff *      rb,
                     const struct timespec * abstime)
 {

@@ -68,7 +68,8 @@ int      np1_flow_write(int                  fd,
 
 int      ipcp_flow_dealloc(int fd);
 
-int      ipcp_flow_fini(int fd);
+int      ipcp_flow_fini(int               fd,
+                        struct ssm_pool * pool);
 
 int      ipcp_flow_get_qoscube(int         fd,
                                qoscube_t * cube);

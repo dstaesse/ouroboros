@@ -1227,7 +1227,7 @@ int fa_irm_update(int              fd,
 
 int fa_dealloc(int fd)
 {
-        if (ipcp_flow_fini(fd) < 0)
+        if (ipcp_flow_fini(fd, NP1_GET_POOL(fd)) < 0)
                 return 0;
 
         psched_del(fa.psched, fd);
