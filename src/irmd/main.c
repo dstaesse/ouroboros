@@ -1172,18 +1172,20 @@ static void __cleanup_flow(void * flow)
 
 /*
  * A PoA flow is secured as the IPCP that owns it: trust is in the
- * peer itself. Without a security config for that name the flow
- * stays in the clear.
+ * peer itself. An IPCP that is not bound yet uses the default
+ * security paths for its name.
  */
 static void poa_name_info(const char *       name,
                           struct name_info * info)
 {
-        if (reg_get_name_info(name, info) == 0)
+        if (reg_has_name(name) && reg_get_name_info(name, info) == 0)
                 return;
 
         memset(info, 0, sizeof(*info));
 
         strcpy(info->name, name);
+
+        name_update_sec_paths(info);
 }
 
 static int flow_accept(struct flow_info * flow,
