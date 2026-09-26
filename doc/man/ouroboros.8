@@ -10,7 +10,7 @@ Ouroboros - the free IPC subsystem
 
 .SH SYNOPSIS
 
-\fIirmd\fR [--stdout] [--version]
+\fIirmd\fR [--config <path>] [--stdout] [--version]
 
 \fIirm\fR [ipcp] <command> <args>
 
@@ -41,6 +41,14 @@ or, if your system uses systemd, Ouroboros can be started as a service:
 $ systemctl start ouroboros
 
 When started from the command line, the IRM has the following options:
+.PP
+\-\-config \fIpath\fR
+.RS 4
+The \fIIRM\fR daemon will read its configuration from the file at
+\fIpath\fR. Only available when Ouroboros is built with configuration
+file support.
+.RE
+
 .PP
 \-\-stdout
 .RS 4
@@ -173,10 +181,10 @@ default: SHA3_256.
 .br
 default: 4 bytes.
 .PP
-[fd \fIfd_size\fR] specifies the size of the flow descriptor field
-(for identifying internal components using the DT component) in bytes.
+[eid \fIeid_size\fR] specifies the size of the endpoint identifier
+field in bytes.
 .br
-default: 2 bytes.
+default: 8 bytes, the only supported value.
 .PP
 [ttl] specifies the maximum value for the time-to-live field.
 .PP
@@ -268,7 +276,7 @@ attached to.
 \fBirm ipcp enroll\fR name \fIname\fR [type \fItype\fR] [dst \fIdst\fR] \
 [layer \fIlayer\fR] [transit \fBon\fR|\fBoff\fR] [\fIautobind\fR]
 .RS 4
-enrolls a unicast ot broadcast IPCP \fIname\fR with a dst IPCP into a
+enrolls a unicast or broadcast IPCP \fIname\fR with a dst IPCP into a
 layer. Either dst or layer need to be specified.
 .PP
 [type \fItype\fR] specifies the IPCP type (unicast or broadcast).
@@ -362,7 +370,7 @@ in a layer, the process \fIpid\fR will accept flows for that name.
 .RS 4
 bind an IPCP \fIipcp\fR to a \fIname\fR. If \fIname\fR is registered
 in a layer, \fIipcp\fR will accept flows for \fIname\fR. This is a
-shorthand for binding the pid of \fipcp\fR.
+shorthand for binding the pid of \fIipcp\fR.
 .RE
 
 .PP

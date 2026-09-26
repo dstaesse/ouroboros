@@ -3,6 +3,7 @@
 .\" Sander Vrijders <sander@ouroboros.rocks>
 
 .TH OUROBOROS-TUTORIAL 7 2018-10-05 Ouroboros "Ouroboros User Manual"
+.nh
 
 .SH NAME
 
@@ -41,7 +42,7 @@ The output should be
 .br
 ==25959== irmd(II): IRMd shutting down...
 .br
-==25959== irmd(II): Bye.
+==25959== irmd(II): Ouroboros IPC Resource Manager daemon exited. Bye.
 .RE
 
 .SH PINGING A SERVER APPLICATION OVER THE LOOPBACK ADAPTER
@@ -96,7 +97,7 @@ The IRMd should respond with
 .RS 4
 ==23918== irmd(II): Created new name: my.oping.server.
 .br
-==23918== irmd(II): Registered my.oping.server with IPCP 23932 as 716016b1.
+==23918== irmd(II): Registered my.oping.server with IPCP 23932 as d0b5d7eb.
 .RE
 
 Now start a server of oping in the background (or in a different
@@ -117,41 +118,56 @@ pings:
 .RS 4
 $ oping -n my.oping.server -c 3
 .br
-Pinging my.oping.server with 64 bytes of data:
+Pinging my.oping.server with 64 bytes of data (3 packets):
 
-64 bytes from my.oping.server: seq=0 time=0.475 ms
+64 bytes from my.oping.server: seq=0 time=0.136 ms
 .br
-64 bytes from my.oping.server: seq=1 time=0.304 ms
+64 bytes from my.oping.server: seq=1 time=97.000 \(mcs
 .br
-64 bytes from my.oping.server: seq=2 time=0.398 ms
+64 bytes from my.oping.server: seq=2 time=0.107 ms
 
 --- my.oping.server ping statistics ---
 .br
-3 packets transmitted, 3 received, 0% packet loss, time: 3001.011 ms
+3 packets transmitted, 3 received, 0 out-of-order, 0% packet loss,
+time: 3000.977 ms
 .br
-rtt min/avg/max/mdev = 0.304/0.392/0.475/0.086 ms
+rtt min/avg/max/mdev = 0.097/0.113/0.136/0.020 ms
 .RE
 
-That's all there is to it! The IRMd should log the flow
-allocation. There are two endpoints of the flow (flow_id's 0 and 1),
-one for the server (1) and one for the client (0). After the flow
-request, a new flow_id is created at the server side (flow_id 1) and
-then a previously pending flow (on flow_id 0) is allocated following
-the response from the server.
-
-When the communication is done, the flow is deallocated and the
-resources (flow_id's 0 and 1) are released.
+That's all there is to it! The IRMd logs the flow allocation. Client
+and server run on the same machine, so the IRMd connects them
+directly, bypassing the lan layer. Before the flow is allocated, the
+two ends run the Ouroboros Authentication Protocol (OAP). With no
+certificates and no key exchange configured for the name, the flow is
+neither authenticated nor encrypted.
 
 .RS 4
-==23918== irmd(II): Flow request arrived for my.oping.server.
+==23918== irmd(II): Allocating flow for 24081 to my.oping.server (uid 0).
 .br
-==23918== irmd(II): Flow on flow_id 1 allocated.
+==23918== irmd/oap(II): No authentication certificates for my.oping.server.
 .br
-==23918== irmd(II): Flow on flow_id 0 allocated.
+==23918== irmd/oap(II): Key exchange not configured for my.oping.server.
 .br
-==23918== irmd(II): Completed deallocation of flow_id 0 by process 23932.
+==23918== irmd/oap(II): No authentication certificates for my.oping.server.
 .br
-==23918== irmd(II): Completed deallocation of flow_id 1 by process 23932.
+==23918== irmd/oap(II): Key exchange not configured for my.oping.server.
+.br
+==23918== irmd/oap(II): [54ae7108870b7061] OAP request processed for
+my.oping.server.
+.br
+==23918== irmd(II): Flow 2 accepted (direct) by 24063 for my.oping.server.
+.br
+==23918== irmd/oap(II): [54ae7108870b7061] OAP completed for my.oping.server.
+.br
+==23918== irmd(II): Flow 2 allocated (direct) for 24081 to my.oping.server.
+.RE
+
+When the communication is done, both ends deallocate the flow.
+
+.RS 4
+==23918== irmd(II): Deallocating flow 2 for process 24081 (timeout: 0 s).
+.br
+==23918== irmd(II): Deallocating flow 2 for process 24063 (timeout: 0 s).
 .RE
 
 .SH TERMINOLOGY
