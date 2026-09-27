@@ -560,6 +560,7 @@ int oap_cli_complete(void *            ctx,
         buffer_t             resp_hash = BUF_INIT;
         uint8_t *            id;
         int                  rc;
+        int                  err = -ECRYPT;
 
         assert(ctx != NULL);
         assert(data != NULL);
@@ -619,6 +620,8 @@ int oap_cli_complete(void *            ctx,
         if (oap_auth_peer(peer, &s->scfg, &s->local_hdr, &peer_hdr,
                           cached_crt) < 0) {
                 log_err_id(id, "Failed to authenticate server.");
+
+                err = -EAUTH;
                 goto fail_oap;
         }
 
@@ -642,6 +645,8 @@ int oap_cli_complete(void *            ctx,
         if (peer_hdr.crt.len > 0 && strcmp(peer, s->peer) != 0) {
                 log_err_id(id, "Peer crt for '%s' does not match '%s'.",
                          peer, s->peer);
+
+                err = -EAUTH;
                 goto fail_oap;
         }
 
@@ -701,5 +706,5 @@ int oap_cli_complete(void *            ctx,
  fail_oap:
         freebuf(peer_hdr.sealed_pt);
         oap_ctx_free(s);
-        return -ECRYPT;
+        return err;
 }
