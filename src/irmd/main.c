@@ -1155,16 +1155,6 @@ static int proc_announce(const struct proc_info * info)
         return -1;
 }
 
-static int proc_exit(pid_t pid)
-{
-        if (reg_destroy_proc(pid) < 0)
-                log_err("Failed to remove process %d.", pid);
-
-        log_info("Process removed: %d.", pid);
-
-        return 0;
-}
-
 static void __cleanup_flow(void * flow)
 {
         reg_destroy_flow(((struct flow_info *) flow)->id);
@@ -1771,9 +1761,17 @@ static int flow_alloc(const char *       dst,
 
         return err;
  fail_peer:
-        flow->state = FLOW_DEALLOCATED;
  fail_wait:
         freebuf(resp_hdr);
+        freebuf(req_hdr);
+        oap_ctx_free(ctx);
+        freebuf(hash);
+        reg_dealloc_flow(flow);
+
+        if (ipcp_flow_dealloc(flow->n_1_pid, flow->id, 0) < 0)
+                log_err("Failed to request dealloc from %d.", flow->n_1_pid);
+
+        return err;
  fail_alloc:
         freebuf(req_hdr);
         oap_ctx_free(ctx);
@@ -2029,6 +2027,32 @@ static int flow_dealloc(struct flow_info * flow,
 
         if (reg_flow_is_poa(flow->id))
                 return flow_dealloc_resp(flow);
+
+        return 0;
+}
+
+/* A process that is gone left its flows to the N-1 IPCPs. */
+static void dealloc_proc_flows(pid_t pid)
+{
+        struct flow_info info;
+        struct timespec  ts = TIMESPEC_INIT_S(0);
+
+        while (reg_get_proc_flow(pid, &info) == 0) {
+                if (info.n_1_pid == pid)
+                        reg_destroy_flow(info.id);
+                else
+                        flow_dealloc(&info, &ts);
+        }
+}
+
+static int proc_exit(pid_t pid)
+{
+        dealloc_proc_flows(pid);
+
+        if (reg_destroy_proc(pid) < 0)
+                log_err("Failed to remove process %d.", pid);
+
+        log_info("Process removed: %d.", pid);
 
         return 0;
 }
@@ -3429,6 +3453,7 @@ void * irm_sanitize(void * o)
         while (true) {
                 while((pid = reg_get_dead_proc()) != -1) {
                         log_info("Process %d died.", pid);
+                        dealloc_proc_flows(pid);
                         cleanup_pid(pid);
                         reg_destroy_proc(pid);
                 }

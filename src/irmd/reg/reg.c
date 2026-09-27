@@ -2171,6 +2171,37 @@ int reg_prepare_flow_direct(struct flow_info * info,
         return -1;
 }
 
+/* An allocated flow of pid that goes through an N-1. */
+int reg_get_proc_flow(pid_t              pid,
+                      struct flow_info * info)
+{
+        struct list_head * p;
+        int                ret = -ENOENT;
+
+        assert(info != NULL);
+
+        pthread_mutex_lock(&reg.mtx);
+
+        llist_for_each(p, &reg.flows) {
+                struct reg_flow * entry;
+
+                entry = list_entry(p, struct reg_flow, next);
+                if (entry->info.n_pid != pid || entry->direct)
+                        continue;
+
+                if (entry->info.state != FLOW_ALLOCATED)
+                        continue;
+
+                *info = entry->info;
+                ret   = 0;
+                break;
+        }
+
+        pthread_mutex_unlock(&reg.mtx);
+
+        return ret;
+}
+
 bool reg_flow_is_direct(int flow_id)
 {
         struct reg_flow * flow;
@@ -2837,6 +2868,7 @@ int reg_wait_flow_direct(int                      flow_id,
         return -1;
 }
 
+/* An allocation that failed at the N-1 is released like a live flow. */
 void reg_dealloc_flow(struct flow_info * info)
 {
         struct reg_flow * flow;
@@ -2870,7 +2902,8 @@ void reg_dealloc_flow(struct flow_info * info)
                 return;
         }
 
-        assert(flow->info.state == FLOW_ALLOCATED);
+        assert(flow->info.state != FLOW_INIT);
+        assert(flow->info.state != FLOW_ACCEPT_PENDING);
 
         flow->info.state = FLOW_DEALLOC_PENDING;
         info->state = FLOW_DEALLOC_PENDING;

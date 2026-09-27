@@ -246,6 +246,9 @@ void   reg_dealloc_flow(struct flow_info * info);
 
 void   reg_dealloc_flow_resp(struct flow_info * info);
 
+int    reg_get_proc_flow(pid_t              pid,
+                         struct flow_info * info);
+
 int    reg_wait_proc(pid_t                   pid,
                      const struct timespec * abstime);
 
