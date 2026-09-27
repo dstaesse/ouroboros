@@ -1871,11 +1871,23 @@ int openssl_verify_crt(void * store,
         return openssl_verify_crt_pin(store, untrusted, crt, NULL);
 }
 
+/* EdDSA and provider-based (PQC) signatures have an intrinsic digest */
+static bool has_intrinsic_md(const EVP_PKEY * pk)
+{
+        int id;
+
+        id = EVP_PKEY_get_id(pk);
+        if (id < 0)
+                return true;
+
+        return id == EVP_PKEY_ED25519 || id == EVP_PKEY_ED448;
+}
+
 static const EVP_MD * select_md(EVP_PKEY * pkey,
                                 int        nid)
 {
-        if (EVP_PKEY_get_id(pkey) < 0)
-                return NULL; /* Provider-based (PQC) */
+        if (has_intrinsic_md(pkey))
+                return NULL;
 
         if (nid == NID_undef)
                 return NULL; /* Classical requires explicit nid */
@@ -1885,8 +1897,7 @@ static const EVP_MD * select_md(EVP_PKEY * pkey,
 
 bool openssl_pk_requires_md(const EVP_PKEY * pk)
 {
-        /* Provider-based (PQC) signatures have an intrinsic digest */
-        return EVP_PKEY_get_id(pk) >= 0;
+        return !has_intrinsic_md(pk);
 }
 
 int openssl_sign(EVP_PKEY * pkp,
