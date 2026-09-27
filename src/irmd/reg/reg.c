@@ -1950,6 +1950,7 @@ int reg_respond_alloc(struct flow_info * info,
 
         info->n_pid   = flow->info.n_pid;
         info->n_1_pid = flow->info.n_pid;
+        info->uid     = flow->info.uid;
 
         if (reg_flow_update(flow, info) < 0) {
                 log_err("Failed to create flow structs.");
