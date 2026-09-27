@@ -269,6 +269,7 @@ static struct list_head * __reg_after_proc(pid_t pid)
         return p;
 }
 
+/* IPCPs are killed separately, after the applications. */
 static void __reg_kill_all_proc(int signal)
 {
         struct list_head * p;
@@ -276,7 +277,8 @@ static void __reg_kill_all_proc(int signal)
         llist_for_each(p, &reg.procs) {
                 struct reg_proc * entry;
                 entry = list_entry(p, struct reg_proc, next);
-                kill(entry->info.pid, signal);
+                if (__reg_get_ipcp(entry->info.pid) == NULL)
+                        kill(entry->info.pid, signal);
         }
 }
 
@@ -409,6 +411,26 @@ static pid_t __reg_first_spawned(void)
                 return -1;
 
         return llist_first_entry(&reg.spawned, struct pid_entry, next)->pid;
+}
+
+static void __reg_kill_all_ipcps(int signal)
+{
+        struct list_head * p;
+
+        llist_for_each(p, &reg.ipcps) {
+                struct reg_ipcp * entry;
+
+                entry = list_entry(p, struct reg_ipcp, next);
+                kill(entry->info.pid, signal);
+        }
+}
+
+static pid_t __reg_first_ipcp(void)
+{
+        if (llist_is_empty(&reg.ipcps))
+                return -1;
+
+        return llist_first_entry(&reg.ipcps, struct reg_ipcp, next)->info.pid;
 }
 
 static struct reg_prog * __reg_get_prog(const char * name)
@@ -769,8 +791,7 @@ bool reg_has_flow(int flow_id)
 
 int reg_create_ipcp(const struct ipcp_info * info)
 {
-        struct reg_ipcp *  ipcp;
-        struct pid_entry * entry;
+        struct reg_ipcp * ipcp;
 
         assert(info != NULL);
         assert(info->pid != 0);
@@ -789,25 +810,12 @@ int reg_create_ipcp(const struct ipcp_info * info)
                 goto fail_ipcp;
         }
 
-        entry = malloc(sizeof(*entry));
-        if (entry == NULL) {
-                log_err("Failed to create spawn entry.\n");
-                goto fail_spawn;
-        }
-
-        entry->pid = info->pid;
-
         llist_add_tail_at(&ipcp->next, __reg_after_ipcp(info), &reg.ipcps);
-        llist_add_at(&entry->next,
-                     __reg_after_spawned(info->pid),
-                     &reg.spawned);
 
         pthread_mutex_unlock(&reg.mtx);
 
         return 0;
 
- fail_spawn:
-        reg_ipcp_destroy(ipcp);
  fail_ipcp:
         pthread_mutex_unlock(&reg.mtx);
         return -1;
@@ -1372,6 +1380,28 @@ pid_t reg_first_spawned(void)
         pthread_mutex_lock(&reg.mtx);
 
         pid = __reg_first_spawned();
+
+        pthread_mutex_unlock(&reg.mtx);
+
+        return pid;
+}
+
+void reg_kill_all_ipcps(int signal)
+{
+        pthread_mutex_lock(&reg.mtx);
+
+        __reg_kill_all_ipcps(signal);
+
+        pthread_mutex_unlock(&reg.mtx);
+}
+
+pid_t reg_first_ipcp(void)
+{
+        pid_t pid;
+
+        pthread_mutex_lock(&reg.mtx);
+
+        pid = __reg_first_ipcp();
 
         pthread_mutex_unlock(&reg.mtx);
 

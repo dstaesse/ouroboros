@@ -98,7 +98,8 @@ enum irm_state {
         IRMD_NULL = 0,
         IRMD_INIT,
         IRMD_RUNNING,
-        IRMD_SHUTDOWN
+        IRMD_SHUTDOWN,
+        IRMD_STOP_IPCPS
 };
 
 struct cmd {
@@ -2037,6 +2038,10 @@ static void dealloc_proc_flows(pid_t pid)
         struct flow_info info;
         struct timespec  ts = TIMESPEC_INIT_S(0);
 
+        /* The N-1 IPCPs release their fds when they exit. */
+        if (irmd_get_state() == IRMD_STOP_IPCPS)
+                return;
+
         while (reg_get_proc_flow(pid, &info) == 0) {
                 if (info.n_1_pid == pid)
                         reg_destroy_flow(info.id);
@@ -3953,7 +3958,7 @@ static void * kill_dash_nine(void * o)
 
         while (slept < IRMD_PKILL_TIMEOUT) {
                 time_t intv = 1;
-                if (reg_first_spawned() == -1)
+                if (reg_first_spawned() == -1 && reg_first_ipcp() == -1)
                         goto finish;
                 sleep(intv);
                 slept += intv;
@@ -3961,6 +3966,7 @@ static void * kill_dash_nine(void * o)
 
         log_dbg("I guess I’ll have to shut you down for good this time,");
         log_dbg("already tried a SIGQUIT, so now it’s KILL DASH 9.");
+        reg_kill_all_ipcps(SIGKILL);
 #ifdef IRMD_KILL_ALL_PROCESSES
         reg_kill_all_proc(SIGKILL);
         nanosleep(&ts, NULL);
@@ -3971,19 +3977,11 @@ static void * kill_dash_nine(void * o)
         return (void *) 0;
 }
 
-static void kill_all_spawned(void)
+static void wait_children(pid_t (* first)(void))
 {
-        pid_t     pid;
-        pthread_t grimreaper;
+        pid_t pid;
 
-#ifdef IRMD_KILL_ALL_PROCESSES
-        reg_kill_all_proc(SIGTERM);
-#else
-        reg_kill_all_spawned(SIGTERM);
-#endif
-        pthread_create(&grimreaper, NULL, kill_dash_nine, NULL);
-
-        pid = reg_first_spawned();
+        pid = first();
         while (pid != -1) {
                 int s;
                 if (kill(pid, 0) == 0)
@@ -3993,8 +3991,27 @@ static void kill_all_spawned(void)
                         cleanup_pid(pid);
                         reg_destroy_proc(pid);
                 }
-                pid = reg_first_spawned();
+                pid = first();
         }
+}
+
+static void kill_all_spawned(void)
+{
+        pthread_t grimreaper;
+
+#ifdef IRMD_KILL_ALL_PROCESSES
+        reg_kill_all_proc(SIGTERM);
+#else
+        reg_kill_all_spawned(SIGTERM);
+#endif
+        pthread_create(&grimreaper, NULL, kill_dash_nine, NULL);
+
+        /* Applications first, so their flows go down through the IPCPs. */
+        wait_children(reg_first_spawned);
+
+        irmd_set_state(IRMD_STOP_IPCPS);
+        reg_kill_all_ipcps(SIGTERM);
+        wait_children(reg_first_ipcp);
 
         pthread_join(grimreaper, NULL);
 }

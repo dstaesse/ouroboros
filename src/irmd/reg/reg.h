@@ -69,7 +69,11 @@ bool   reg_has_spawned(pid_t pid);
 
 void   reg_kill_all_spawned(int signal);
 
-int    reg_first_spawned(void);
+pid_t  reg_first_spawned(void);
+
+void   reg_kill_all_ipcps(int signal);
+
+pid_t  reg_first_ipcp(void);
 
 int    reg_bind_proc(const char * name,
                      pid_t        proc);
