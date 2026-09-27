@@ -157,6 +157,11 @@ int    reg_wait_flow_accepted(struct flow_info *      info,
 int    reg_wait_flow_accepting(const char *            name,
                                const struct timespec * abstime);
 
+/* As reg_wait_flow_accepting, for one process; 0 is any process. */
+int    reg_wait_proc_accepting(const char *            name,
+                               pid_t                   pid,
+                               const struct timespec * abstime);
+
 int    reg_respond_accept(struct flow_info * info,
                           buffer_t *         pbuf);
 

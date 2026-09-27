@@ -184,11 +184,12 @@ static struct reg_name * __reg_get_name(const char * name)
         return NULL;
 }
 
-static int __reg_get_pending_flow_id(const char * name)
+/* The accept of pid for name, or of any process if pid is 0. */
+static int __reg_get_pending_flow_id(const char * name,
+                                     pid_t        pid)
 {
         struct reg_name * entry;
         struct reg_flow * flow;
-        pid_t             pid;
 
         assert(name != NULL);
         assert(strlen(name) > 0);
@@ -198,12 +199,16 @@ static int __reg_get_pending_flow_id(const char * name)
         if (entry == NULL)
                 return -ENAME;
 
-        pid = reg_name_get_active(entry);
+        if (pid == 0)
+                pid = reg_name_get_active(entry);
+        else if (!reg_name_has_proc(entry, pid))
+                return -ENAME;
+
         if (pid < 0)
                 return -EAGAIN;
 
         flow = __reg_get_accept_flow(pid);
-        if (flow == NULL) /* compiler barks, this can't be NULL */
+        if (flow == NULL)
                 return -EAGAIN;
 
         strcpy(flow->name, name);
@@ -2082,6 +2087,13 @@ int reg_wait_flow_accepted(struct flow_info *      info,
 int reg_wait_flow_accepting(const char *            name,
                             const struct timespec * abstime)
 {
+        return reg_wait_proc_accepting(name, 0, abstime);
+}
+
+int reg_wait_proc_accepting(const char *            name,
+                            pid_t                   pid,
+                            const struct timespec * abstime)
+{
         int ret;
 
         assert(name != NULL);
@@ -2092,7 +2104,7 @@ int reg_wait_flow_accepting(const char *            name,
         pthread_cleanup_push(__cleanup_mutex_unlock, &reg.mtx);
 
         while (true) {
-                ret = __reg_get_pending_flow_id(name);
+                ret = __reg_get_pending_flow_id(name, pid);
                 if (ret != -EAGAIN)
                         break;
 

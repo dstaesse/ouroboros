@@ -1450,6 +1450,19 @@ static int get_ipcp_by_dst(const char *     dst,
 }
 
 /* A started program is tracked so shutdown terminates and reaps it. */
+/* A flow over a PoA is accepted by the IPCP that owns the PoA. */
+static int wait_for_poa_accept(const char * name,
+                               pid_t        pid)
+{
+        struct timespec timeo = TIMESPEC_INIT_MS(IRMD_REQ_ARR_TIMEOUT);
+        struct timespec abstime;
+
+        clock_gettime(PTHREAD_COND_CLOCK, &abstime);
+        ts_add(&abstime, &timeo, &abstime);
+
+        return reg_wait_proc_accepting(name, pid, &abstime);
+}
+
 static int wait_for_accept(const char * name)
 {
         struct timespec timeo = TIMESPEC_INIT_MS(IRMD_REQ_ARR_TIMEOUT);
@@ -1953,9 +1966,9 @@ static int poa_req_arr(struct flow_info * flow,
 
         log_info("PoA flow request arrived for %s.", name);
 
-        ret = wait_for_accept(name);
+        ret = wait_for_poa_accept(name, ipcp.pid);
         if (ret < 0) {
-                log_err("No active process for %s.", name);
+                log_err("IPCP %d not accepting flows for %s.", ipcp.pid, name);
                 goto fail;
         }
 
