@@ -584,7 +584,7 @@ static void do_enroll(const char *           dst,
 
         ret_msg->result = ipcpd.ops->ipcp_enroll(dst, pa, &info);
         if (ret_msg->result < 0) {
-                log_err("Failed to bootstrap IPCP.");
+                log_err("Failed to enroll IPCP.");
                 return;
         }
 
