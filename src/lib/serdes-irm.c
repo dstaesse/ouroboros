@@ -495,8 +495,10 @@ int ipcp_flow_req_arr__irm_req_ser(buffer_t *               buf,
         return -ENOMEM;
 }
 
+/* hash and data are borrowed from the caller; detach before free. */
 static int __ep_flow_ser(buffer_t *               buf,
                          const struct flow_info * flow,
+                         const buffer_t *         hash,
                          const buffer_t *         data,
                          int                      response,
                          const char *             dst,
@@ -523,6 +525,12 @@ static int __ep_flow_ser(buffer_t *               buf,
                         goto fail_msg;
         }
 
+        if (hash != NULL) {
+                msg->has_hash  = true;
+                msg->hash.len  = hash->len;
+                msg->hash.data = hash->data;
+        }
+
         if (data != NULL) {
                 msg->has_pk  = true;
                 msg->pk.len  = data->len;
@@ -542,8 +550,10 @@ static int __ep_flow_ser(buffer_t *               buf,
 
         err = 0;
  fail_msg:
-        msg->pk.len  = 0;
-        msg->pk.data = NULL;
+        msg->hash.len  = 0;
+        msg->hash.data = NULL;
+        msg->pk.len    = 0;
+        msg->pk.data   = NULL;
 
         irm_msg__free_unpacked(msg, NULL);
  fail_malloc:
@@ -554,7 +564,7 @@ int poa_flow_alloc__irm_req_ser(buffer_t *               buf,
                                 const struct flow_info * flow,
                                 const char *             dst)
 {
-        return __ep_flow_ser(buf, flow, NULL, 0, dst,
+        return __ep_flow_ser(buf, flow, NULL, NULL, 0, dst,
                              IRM_MSG_CODE__IRM_POA_FLOW_ALLOC);
 }
 
@@ -563,15 +573,16 @@ int poa_flow_alloc_r__irm_req_ser(buffer_t *               buf,
                                   const buffer_t *         data,
                                   int                      response)
 {
-        return __ep_flow_ser(buf, flow, data, response, NULL,
+        return __ep_flow_ser(buf, flow, NULL, data, response, NULL,
                              IRM_MSG_CODE__IRM_POA_FLOW_ALLOC_R);
 }
 
 int ipcp_poa_flow_req_arr__irm_req_ser(buffer_t *               buf,
+                                       const buffer_t *         dst,
                                        const struct flow_info * flow,
                                        const buffer_t *         data)
 {
-        return __ep_flow_ser(buf, flow, data, 0, NULL,
+        return __ep_flow_ser(buf, flow, dst, data, 0, NULL,
                              IRM_MSG_CODE__IPCP_POA_FLOW_REQ_ARR);
 }
 

@@ -733,6 +733,7 @@ void poa_rx_pkt(struct poa *         poa,
 static int poa_flow_req_arr(struct poa_flow * pf,
                             qosspec_t         qs,
                             uint32_t          mtu,
+                            const buffer_t *  dst,
                             const buffer_t *  data)
 {
         struct flow_info flow;
@@ -748,7 +749,7 @@ static int poa_flow_req_arr(struct poa_flow * pf,
         flow.qs      = qs;
         flow.mpl     = pf->poa->mpl;
         flow.mtu     = mtu;
-        if (ipcp_poa_flow_req_arr__irm_req_ser(&msg, &flow, data) < 0)
+        if (ipcp_poa_flow_req_arr__irm_req_ser(&msg, dst, &flow, data) < 0)
                 return -ENOMEM;
 
         pf_set_pending(pf);
@@ -785,6 +786,7 @@ static void handle_flow_req(struct poa *                poa,
         struct list_head * p;
         struct poa_flow *  pf     = NULL;
         qosspec_t          qs;
+        buffer_t           dst;
         buffer_t           buf;
         buffer_t           answer_data = BUF_INIT;
         uint32_t           r_eid;
@@ -793,6 +795,9 @@ static void handle_flow_req(struct poa *                poa,
         int                answer = 0;
         bool               found  = false;
         bool               served = false;
+
+        if (data_len < POA_QUERY_HLEN)
+                return; /* malformed */
 
         r_eid = ntoh32(msg->s_eid);
 
@@ -838,10 +843,12 @@ static void handle_flow_req(struct poa *                poa,
         if (served || pf == NULL)
                 return;
 
-        buf.len  = data_len;
-        buf.data = (uint8_t *) data;
+        dst.len  = POA_QUERY_HLEN;
+        dst.data = (uint8_t *) data;
+        buf.len  = data_len - POA_QUERY_HLEN;
+        buf.data = (uint8_t *) data + POA_QUERY_HLEN;
         mtu      = poa->ops->poa_mtu(poa, src);
-        if (poa_flow_req_arr(pf, qs, mtu, &buf) < 0) {
+        if (poa_flow_req_arr(pf, qs, mtu, &dst, &buf) < 0) {
                 mgmt_send(poa, src, POA_FLOW_REPLY, pf->eid, r_eid, qos_raw,
                           -1, NULL);
                 pf_destroy(pf);
@@ -2269,6 +2276,22 @@ static int poa_peer_resolve(const char *      dst,
         return ops->poa_query(dst, NULL, peer);
 }
 
+/* The FLOW_REQ data: the hash of dst, then the OAP request. */
+static int flow_req_data(const char *     dst,
+                         const buffer_t * req,
+                         buffer_t *       out)
+{
+        out->len  = POA_QUERY_HLEN + req->len;
+        out->data = malloc(out->len);
+        if (out->data == NULL)
+                return -ENOMEM;
+
+        str_hash(HASH_SHA3_256, out->data, dst);
+        memcpy(out->data + POA_QUERY_HLEN, req->data, req->len);
+
+        return 0;
+}
+
 /*
  * Three steps: the IRMd creates the flow and prepares the key exchange,
  * the PoA handshakes with the peer, the IRMd completes the
@@ -2289,6 +2312,7 @@ int poa_flow_alloc(const char *            dst,
         uint8_t           buf[SOCK_BUF_SIZE];
         buffer_t          msg = {SOCK_BUF_SIZE, buf};
         buffer_t          req;
+        buffer_t          wire;
         buffer_t          resp;
         uint32_t          mtu = 0;
         int               err;
@@ -2330,11 +2354,18 @@ int poa_flow_alloc(const char *            dst,
         if (err < 0)
                 return err;
 
-        clock_gettime(PTHREAD_COND_CLOCK, &t0);
-
-        err = poa_alloc(addr, flow.qs, &req, &resp, &pf, &mtu, timeo);
+        err = flow_req_data(dst, &req, &wire);
 
         freebuf(req);
+
+        if (err < 0)
+                goto fail_alloc;
+
+        clock_gettime(PTHREAD_COND_CLOCK, &t0);
+
+        err = poa_alloc(addr, flow.qs, &wire, &resp, &pf, &mtu, timeo);
+
+        freebuf(wire);
 
         if (err < 0)
                 goto fail_alloc;

@@ -1161,11 +1161,7 @@ static void __cleanup_flow(void * flow)
         reg_destroy_flow(((struct flow_info *) flow)->id);
 }
 
-/*
- * A PoA flow is secured as the IPCP that owns it: trust is in the
- * peer itself. An IPCP that is not bound yet uses the default
- * security paths for its name.
- */
+/* A name reached over a PoA gets default paths unless registered here. */
 static void poa_name_info(const char *       name,
                           struct name_info * info)
 {
@@ -1239,9 +1235,7 @@ static int flow_accept(struct flow_info * flow,
                 goto fail_oap;
         }
 
-        if (reg_flow_is_poa(flow->id)) {
-                poa_name_info(name, &info);
-        } else if (reg_get_name_info(name, &info) < 0) {
+        if (reg_get_name_info(name, &info) < 0) {
                 log_err("Failed to get name info for %s.", name);
                 err = -ENAME;
                 goto fail_oap;
@@ -1813,7 +1807,7 @@ static int poa_alloc(struct flow_info * flow,
                 goto fail_flow;
         }
 
-        reg_set_name_for_flow_id(ipcp.name, flow->id);
+        reg_set_name_for_flow_id(dst, flow->id);
 
         if (reg_flow_set_poa(flow->id) < 0) {
                 err = -EBADF;
@@ -1829,10 +1823,10 @@ static int poa_alloc(struct flow_info * flow,
                 goto fail_prepare;
         }
 
-        poa_name_info(ipcp.name, &info);
+        poa_name_info(dst, &info);
 
         if (oap_cli_prepare(&ctx, &info, dst, &req_hdr, *data, false) < 0) {
-                log_err("Failed to prepare OAP request for %s.", ipcp.name);
+                log_err("Failed to prepare OAP request for %s.", dst);
 
                 err = -EBADF;
                 goto fail_prepare;
@@ -1843,8 +1837,8 @@ static int poa_alloc(struct flow_info * flow,
                 goto fail_ctx;
         }
 
-        log_info("Allocating PoA flow %d for %d as %s.",
-                 flow->id, flow->n_pid, ipcp.name);
+        log_info("Allocating PoA flow %d for %d to %s.",
+                 flow->id, flow->n_pid, dst);
 
         *data = req_hdr;
 
@@ -1861,9 +1855,8 @@ static int poa_alloc(struct flow_info * flow,
 
 /* Completes the key exchange once the IPCP has the peer's response. */
 /*
- * We present the PoA's own credentials and expect the peer to present
- * dst's: the address only says how to reach it. oap_cli_complete
- * frees the ctx on every path.
+ * A PoA flow is secured as a flow to dst: the address only says how
+ * to reach it. oap_cli_complete frees the ctx on every path.
  */
 static int poa_complete(struct flow_info * flow,
                         int                response,
@@ -1933,12 +1926,14 @@ static int poa_complete(struct flow_info * flow,
         return err;
 }
 
-/* A peer requested a flow on a PoA of this IPCP. */
+/* A peer requested a flow to hash on a PoA of this IPCP. */
 static int poa_req_arr(struct flow_info * flow,
+                       const uint8_t *    hash,
                        buffer_t *         data)
 {
         struct ipcp_info  ipcp;
         struct layer_info layer;
+        char              name[NAME_SIZE + 1];
         int               ret;
 
         ipcp.pid = flow->n_1_pid;
@@ -1949,11 +1944,18 @@ static int poa_req_arr(struct flow_info * flow,
                 goto fail;
         }
 
-        log_info("PoA flow request arrived for %s.", ipcp.name);
+        if (reg_get_name_for_hash(name, HASH_SHA3_256, hash) < 0) {
+                log_warn("No name for " HASH_FMT32 ".", HASH_VAL32(hash));
 
-        ret = wait_for_accept(ipcp.name);
+                ret = -ENAME;
+                goto fail;
+        }
+
+        log_info("PoA flow request arrived for %s.", name);
+
+        ret = wait_for_accept(name);
         if (ret < 0) {
-                log_err("No active process for %s.", ipcp.name);
+                log_err("No active process for %s.", name);
                 goto fail;
         }
 
@@ -1964,7 +1966,7 @@ static int poa_req_arr(struct flow_info * flow,
                 goto fail;
         }
 
-        reg_set_name_for_flow_id(ipcp.name, flow->id);
+        reg_set_name_for_flow_id(name, flow->id);
 
         ret = reg_respond_accept(flow, data);
         if (ret < 0) {
@@ -3198,7 +3200,7 @@ static irm_msg_t * do_command_msg(irm_msg_t * msg,
                 msg->pk.len  = 0;
                 flow = flow_info_msg_to_s(msg->flow_info);
 
-                res = poa_req_arr(&flow, &data);
+                res = poa_req_arr(&flow, msg->hash.data, &data);
                 if (res == 0)
                         ret_msg->flow_info = flow_info_s_to_msg(&flow);
                 break;

@@ -62,6 +62,7 @@ int poa_flow_alloc_r__irm_req_ser(buffer_t *               buf,
                                   int                      response);
 
 int ipcp_poa_flow_req_arr__irm_req_ser(buffer_t *               buf,
+                                       const buffer_t *         dst,
                                        const struct flow_info * flow,
                                        const buffer_t *         data);
 
