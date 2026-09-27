@@ -44,6 +44,8 @@
 #include <string.h>
 #include <sys/stat.h>
 
+#define DEFAULT_DIGEST NID_sha256 /* when sec.conf is absent or silent */
+
 struct nid_map {
         uint16_t     nid;
         const char * name;
@@ -176,7 +178,7 @@ int parse_sec_config(struct sec_config * cfg,
         cfg->x.mode = KEM_MODE_SERVER_ENCAP;
         SET_KEX_KDF_NID(cfg, NID_sha256);
         SET_KEX_CIPHER_NID(cfg, NID_aes_256_gcm);
-        SET_KEX_DIGEST_NID(cfg, NID_sha256);
+        SET_KEX_DIGEST_NID(cfg, DEFAULT_DIGEST);
         /* a.req is seeded per-role by the caller; only auth= overrides it */
 
         while (fgets(line, sizeof(line), fp) != NULL) {
@@ -285,9 +287,10 @@ int load_sec_config_file(struct sec_config * cfg,
 
         fp = fopen(path, "r");
         if (fp == NULL) {
-                /* Absent config disables encryption; other errors fail */
+                /* Absent config is encryption=none; other errors fail */
                 if (errno == ENOENT) {
                         CLEAR_KEX_ALGO(cfg);
+                        SET_KEX_DIGEST_NID(cfg, DEFAULT_DIGEST);
                         return 0;
                 }
                 return -errno;
